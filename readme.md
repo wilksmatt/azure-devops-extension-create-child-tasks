@@ -91,6 +91,21 @@ The following are examples of how the wildcard comparison can be used:
 - "*a*b*"   Everything that has an "a" in it, followed by anything, followed by a "b", followed by anything
 ```
 
+## Usage ##
+
+1. Clone the repository
+1. `npm install` to install required local dependencies
+2. `npm install -g grunt` to install a global copy of grunt (unless it's already installed)
+2. `grunt` to build and package the application
+
+### Grunt ###
+
+Basic `grunt` tasks are defined:
+
+* `package-dev` - Builds the development version of the vsix package
+* `package-release` - Builds the release version of the vsix package
+* `publish-dev` - Publishes the development version of the extension to the marketplace using `tfx-cli`
+
 ## Credits ##
 
 Cloned from https://github.com/figueiredorui/1-click-child-links
