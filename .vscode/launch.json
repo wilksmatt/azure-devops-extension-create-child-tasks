@@ -1,0 +1,21 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "firefox",
+            "request": "launch",
+            "name": "Launch Firefox",
+            "url": "https://localhost:3000/",
+            "webRoot": "${workspaceFolder}/src",
+            "reAttach": true,
+            "keepProfileChanges": true,
+            "profileDir": "${workspaceFolder}/.vscode/firefox-profile",
+            "pathMappings": [
+                {
+                    "url": "webpack:///",
+                    "path": "${workspaceFolder}/src"
+                }
+            ]
+        }
+    ]
+}

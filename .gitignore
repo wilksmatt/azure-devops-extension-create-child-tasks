@@ -274,3 +274,13 @@ __pycache__/
 # tools/
 
 tmp/
+
+# VS Code Firefox debug profile
+.vscode/firefox-profile/
+
+# Build artifacts
+dist/
+*.vsix
+
+# Environment files
+.env
