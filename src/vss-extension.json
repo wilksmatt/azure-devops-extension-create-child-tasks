@@ -1,7 +1,7 @@
 {
     "manifestVersion": 1.0,
     "id": "create-child-tasks-public",
-    "version": "0.3.63",
+    "version": "0.4.11",
     "name": "Create Child Tasks",
     "description": "Add pre-defined task templates to a work item with a single click.",
     "public": true,
