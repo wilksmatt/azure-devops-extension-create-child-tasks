@@ -190,6 +190,7 @@ npm run serve
 
 - `package-dev` — Builds the development VSIX
 - `package-release` — Builds the production VSIX
+- `publish-dev` – Publishes the development VSIX
 
 ### Troubleshooting
 
