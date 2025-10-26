@@ -18,13 +18,13 @@ With this extension, it's possible to specify which parent work items apply to e
 
 ![Export](img/create-child-tasks-screenshot-manage-templates-filter-rules.png)
 
-#### Simplified ####
+#### Basic ####
 
 Put the list of applicable parent work item types in the child Task template's description field, like this:
 
 ```[Product Backlog Item, Bug]```
 
-#### Complex ####
+#### Advanced ####
 
 Put a minified (single line) JSON string into the child Task template's description field, like this:
 
