@@ -268,15 +268,16 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
          */
         function IsValidTemplateWIT(currentWorkItem, taskTemplate) {
 
-            // Get the JSON information from the child work item template description
-            var jsonFilters = extractJSON(taskTemplate.description)[0];
+            // Try to extract a JSON object from the template description
+            var extracted = extractJSON(taskTemplate.description);
+            var jsonFilters = extracted && extracted[0];
 
-            // Check whether the JSON string is valid
-            if (IsJsonString(JSON.stringify(jsonFilters))) {
+            // Proceed only if we have an object with an array applywhen
+            if (jsonFilters && typeof jsonFilters === 'object' && Array.isArray(jsonFilters.applywhen)) {
 
                 // Check whether any of the criteria specified in the child work item template JSON matches the current work item
-                var applicableFilter = jsonFilters.applywhen.filter(
-                    function (el) {
+                var someMatch = jsonFilters.applywhen.some(function (el) {
+                    try {
                         return (
                             matchField('System.BoardColumn', currentWorkItem, el) &&
                             matchField('System.BoardLane', currentWorkItem, el) &&
@@ -286,11 +287,14 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                             matchField('System.AreaPath', currentWorkItem, el) &&
                             matchField('System.WorkItemType', currentWorkItem, el)
                         );
+                    } catch (e) {
+                        // If a single rule is malformed, skip it instead of throwing
+                        WriteLog('Skipping malformed filter rule: ' + (e && e.message ? e.message : e));
+                        return false;
                     }
-                );
+                });
 
-                // Return 'true' if any of the fields matched
-                return applicableFilter.length > 0;
+                return someMatch;
             } 
             // Check whether the current work item type was specified using the basic square brackets approach in the child work item template description
             else {
@@ -402,26 +406,6 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                 });
         }
 
-        function ShowDialog(message) {
-
-            var dialogOptions = {
-                title: "1-Click Child-Links",
-                width: 300,
-                height: 200,
-                resizable: false,
-            };
-
-            VSS.getService(VSS.ServiceIds.Dialog).then(function (dialogSvc) {
-
-                dialogSvc.openMessageDialog(message, dialogOptions)
-                    .then(function (dialog) {
-                        //
-                    }, function (dialog) {
-                        //
-                    });
-            });
-        }
-
         function SortTemplates(a, b) {
             var nameA = a.name.toLowerCase(), nameB = b.name.toLowerCase();
             if (nameA < nameB) //sort string ascending
@@ -429,10 +413,6 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             if (nameA > nameB)
                 return 1;
             return 0; //default return value (no sorting)
-        }
-
-        function WriteLog(msg) {
-            console.log('1-Click Child-Links: ' + msg);
         }
 
         function extractJSON(str) {
@@ -461,7 +441,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                     } while (firstClose > firstOpen);
                     firstOpen = str.indexOf('{', firstOpen + 1);
                 } while (firstOpen != -1);
-            } else { return ''; }
+            } else { return null; }
         }
 
         function IsJsonString(str) {
@@ -473,26 +453,63 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             return true;
         }
 
+        /**
+         * Match a specific field in the current work item against a filter element.
+         * @param {*} fieldName // The name of the field to match
+         * @param {*} currentWorkItem // The current work item being evaluated
+         * @param {*} filterElement // The filter element containing the criteria
+         * @returns 
+         */
         function matchField(fieldName, currentWorkItem, filterElement) {
-            // If the filter criteria value is not defined
-            if(typeof (filterElement[fieldName]) === "undefined"){
+
+            // Get the filter value for the specific field (e.g. System.State)
+            var filterVal = filterElement[fieldName];
+
+            // If no filter provided, always a match
+            if (typeof filterVal === 'undefined' || filterVal === null) {
                 return true;
             }
 
-            // If the title field matches a wildcard string comparison (e.g. "*word*")
-            if(fieldName === "System.Title"){
-                return matchWildcardString(currentWorkItem[fieldName], filterElement[fieldName]);
+            // Get the current value for the specific field (e.g. System.State)
+            var curValRaw = currentWorkItem ? currentWorkItem[fieldName] : undefined;
+
+            // Title: wildcard match, case-insensitive, null-safe
+            if (fieldName === 'System.Title') {
+                var title = (curValRaw == null ? '' : curValRaw.toString());
+                var rule = (filterVal == null ? '' : filterVal.toString());
+                return matchWildcardString(title, rule);
             }
 
-            // If the filter criteria is not an array
-            if(!Array.isArray(filterElement[fieldName].toLowerCase()) && filterElement[fieldName].toLowerCase() === currentWorkItem[fieldName].toLowerCase()){
-                return true;
+            // Tags: normalize to arrays and check that current contains all filter tags
+            if (fieldName === 'System.Tags') {
+                var toTagArray = function (val) {
+                    if (Array.isArray(val)) return val;
+                    if (val == null) return [];
+                    // Azure DevOps uses semicolon-separated tags; accept commas/newlines too
+                    return val
+                        .toString()
+                        .split(/[;\,\n]/)
+                        .map(function (s) { return s.trim(); })
+                        .filter(function (s) { return s; });
+                };
+
+                var currentTags = toTagArray(curValRaw).map(function (s) { return s.toLowerCase(); });
+                var filterTags = toTagArray(filterVal).map(function (s) { return s.toLowerCase(); });
+
+                return filterTags.every(function (tag) { return currentTags.indexOf(tag) !== -1; });
             }
-            
-            // If the filter criteria is an array
-            if(Array.isArray(filterElement[fieldName].toLowerCase()) && arraysEqual(filterElement[fieldName], currentWorkItem[fieldName])){
-                return true;
+
+            // For non-tag fields: if filter provides an array, treat as any-of values (case-insensitive)
+            if (Array.isArray(filterVal)) {
+                var curStr = (curValRaw == null ? '' : curValRaw.toString().toLowerCase());
+                return filterVal.some(function (v) {
+                    return (v == null ? '' : v.toString().toLowerCase()) === curStr;
+                });
             }
+
+            // Scalar compare (case-insensitive). If current value is missing, not a match
+            if (curValRaw == null) return false;
+            return filterVal.toString().toLowerCase() === curValRaw.toString().toLowerCase();
         }
 
         /**
@@ -507,8 +524,11 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
          * @param {*} rule 
          */
         function matchWildcardString(str, rule) {
-            var escapeRegex = (str) => str.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1");
-            return new RegExp("^" + rule.split("*").map(escapeRegex).join(".*") + "$").test(str);
+            // Coerce to strings and do case-insensitive match with safe escaping
+            var s = (str == null ? '' : String(str));
+            var r = (rule == null ? '' : String(rule));
+            var escapeRegex = function (x) { return x.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1"); };
+            return new RegExp("^" + r.split("*").map(escapeRegex).join(".*") + "$", "i").test(s);
         }
 
         /**
@@ -530,6 +550,30 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                 if (a[i] !== b[i]) return false;
             }
             return true;
+        }
+
+        function ShowDialog(message) {
+
+            var dialogOptions = {
+                title: "Create Child Tasks",
+                width: 300,
+                height: 200,
+                resizable: false,
+            };
+
+            VSS.getService(VSS.ServiceIds.Dialog).then(function (dialogSvc) {
+
+                dialogSvc.openMessageDialog(message, dialogOptions)
+                    .then(function (dialog) {
+                        //
+                    }, function (dialog) {
+                        //
+                    });
+            });
+        }
+
+        function WriteLog(msg) {
+            console.log('Create Child Tasks: ' + msg);
         }
 
         return {
