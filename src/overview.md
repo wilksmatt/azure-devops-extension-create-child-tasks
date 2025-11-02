@@ -26,24 +26,38 @@ Put the list of applicable parent work item types in the child Task template's d
 
 #### Advanced ####
 
-Put a minified (single line) JSON string into the child Task template's description field, like this:
+Put a minified (single line) JSON string into the child Task template's description field. Supported fields and behaviors:
 
-``` json
+- System.WorkItemType: Single value or array (OR). Case-insensitive exact match.
+- System.State: Single value or array (OR). Case-insensitive exact match.
+- System.BoardColumn: Single value or array (OR). Case-insensitive exact match.
+- System.BoardLane: Single value or array (OR). Case-insensitive exact match.
+- System.Title: Wildcard string (e.g., `"*API*"`). To match multiple patterns, use multiple rule objects in `applywhen` (OR across rules).
+- System.Tags: Single value or array. Arrays require all tags to be present (AND). For tag OR, use multiple rule objects in `applywhen`.
+- System.AreaPath: Single value or array (OR). Exact path match (case-insensitive), no wildcards. Remember to escape backslashes in JSON.
+
+Example with all supported fields and OR logic:
+
+```json
 {
     "applywhen": [
-    {
-        "System.State": "Approved",
-        "System.Tags" : ["Blah", "ClickMe"],
-        "System.WorkItemType": "Product Backlog Item",
-        "System.AreaPath": "Root\\Sub Path\\Another Sub Path"
-    },
-    {
-        "System.BoardColumn": "Testing",
-        "System.BoardLane": "Expedite",
-        "System.State": "Custom State",
-        "System.Title": "Repeatable item",
-        "System.WorkItemType": "Custom Type"
-    }]
+        {
+            "System.WorkItemType": ["Product Backlog Item", "Bug"],
+            "System.State": ["Approved", "Committed"],
+            "System.BoardColumn": ["Development", "Testing"],
+            "System.BoardLane": ["Expedite", "Default"],
+            "System.Title": "*Test*",
+            "System.Tags": ["Tag1", "Tag2"],
+            "System.AreaPath": [
+                "Project\\Area Path\\Sub Path",
+                "Project\\Area Path"
+            ]
+        },
+        {
+            "System.WorkItemType": "User Story",
+            "System.Title": "*Test*"
+        }
+    ]
 }
 ```
 
@@ -90,6 +104,75 @@ The following are examples of how the wildcard comparison can be used:
 - "*a*"     Everything that has an "a" in it
 - "*a*b*"   Everything that has an "a" in it, followed by anything, followed by a "b", followed by anything
 ```
+
+### Using arrays for multiple values (OR) ###
+
+Most fields accept either a single value or an array of values. When you provide an array, any one value may match (logical OR). This is useful when the same template should apply to several states, types, or other field values.
+
+Example (multiple allowed values):
+
+```json
+{
+    "applywhen": [
+        {
+            "System.WorkItemType": ["Product Backlog Item", "Bug"],
+            "System.State": ["Approved", "Committed", "In Progress"],
+        }
+    ]
+}
+```
+
+Notes and exceptions:
+- System.Title: Use a single wildcard string (e.g., `"*Test*"`). To match multiple title patterns, add multiple rule objects in `applywhen` (OR across rules).
+- System.Tags: Arrays here mean all listed tags must be present on the parent (logical AND). For example, `["Tag1", "Tag2"]` requires both tags. If you want an OR across tags, use separate rule objects in `applywhen` (rules are combined with OR):
+
+    ```json
+    {
+        "applywhen": [
+            { "System.WorkItemType": "User Story", "System.Tags": "Tag1" },
+            { "System.WorkItemType": "User Story", "System.Tags": "Tag2" }
+        ]
+    }
+    ```
+
+### Filtering by AreaPath ###
+
+You can target templates to specific Area Paths using the advanced JSON rules in a template's Description. AreaPath must match the parent work item’s Area Path value (case-insensitive) and supports either a single value or an array of allowed values.
+
+- Example (single AreaPath):
+
+```json
+{
+    "applywhen": [
+        {
+            "System.WorkItemType": "Product Backlog Item",
+            "System.AreaPath": "Project\\Area Path\\Sub Path"
+        }
+    ]
+}
+```
+
+- Example (multiple AreaPaths – any-of will match):
+
+```json
+{
+    "applywhen": [
+        {
+            "System.WorkItemType": "Product Backlog Item",
+            "System.AreaPath": [
+                "Project\\Area Path\\Sub Path",
+                "Project\\Area Path"
+            ]
+        }
+    ]
+}
+```
+
+Behavior notes:
+- Matching is case-insensitive, but paths must otherwise match exactly (no wildcards on AreaPath).
+- To include multiple sub-areas, list each full path explicitly in the array.
+- Tip: Copy the exact Area Path from a work item or from Project Settings → Boards → Areas.
+- Important: In JSON, backslash is an escape character. Azure DevOps Area Paths use backslashes (\\) to denote hierarchy. To represent a literal backslash in JSON you must escape it as \\\\.
 
 ## Credits ##
 
