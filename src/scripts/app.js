@@ -285,6 +285,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                             matchField('System.Tags', currentWorkItem, el) &&
                             matchField('System.Title', currentWorkItem, el) &&
                             matchField('System.AreaPath', currentWorkItem, el) &&
+                            matchField('System.IterationPath', currentWorkItem, el) &&
                             matchField('System.WorkItemType', currentWorkItem, el)
                         );
                     } catch (e) {
