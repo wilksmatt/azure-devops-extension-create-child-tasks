@@ -145,24 +145,25 @@ Notes and exceptions:
     }
     ```
 
-### Filtering by AreaPath ###
+### Filtering by AreaPath and IterationPath ###
 
-You can target templates to specific Area Paths using the advanced JSON rules in a template's Description. AreaPath must match the parent work item’s Area Path value (case-insensitive) and supports either a single value or an array of allowed values.
+You can target templates to specific Area or Iteration Paths using the advanced JSON rules in a template's Description. The value must match the parent work item’s corresponding field (case-insensitive) and supports either a single value or an array of allowed values.
 
-- Example (single AreaPath):
+- Example (single AreaPath and IterationPath):
 
 ```json
 {
     "applywhen": [
         {
             "System.WorkItemType": "Product Backlog Item",
-            "System.AreaPath": "Project\\Area Path\\Sub Path"
+            "System.AreaPath": "Project\\Area Path\\Sub Path",
+            "System.IterationPath": "Project\\Iteration\\Sprint 1"
         }
     ]
 }
 ```
 
-- Example (multiple AreaPaths – any-of will match):
+- Example (multiple AreaPaths and IterationPaths – any-of will match):
 
 ```json
 {
@@ -172,6 +173,10 @@ You can target templates to specific Area Paths using the advanced JSON rules in
             "System.AreaPath": [
                 "Project\\Area Path\\Sub Path",
                 "Project\\Area Path"
+            ],
+            "System.IterationPath": [
+                "Project\\Iteration\\Sprint 1",
+                "Project\\Iteration\\Sprint 2"
             ]
         }
     ]
@@ -179,10 +184,10 @@ You can target templates to specific Area Paths using the advanced JSON rules in
 ```
 
 Behavior notes:
-- Matching is case-insensitive, but paths must otherwise match exactly (no wildcards on AreaPath).
-- To include multiple sub-areas, list each full path explicitly in the array.
-- Tip: Copy the exact Area Path from a work item or from Project Settings → Boards → Areas.
-- Important: In JSON, backslash is an escape character. Azure DevOps Area Paths use backslashes (\\) to denote hierarchy. To represent a literal backslash in JSON you must escape it as \\\\.
+- Matching is case-insensitive, but paths must otherwise match exactly (no wildcards on AreaPath/IterationPath).
+- To include multiple sub-areas/iterations, list each full path explicitly in the array.
+- Tip: Copy the exact Area or Iteration Path from a work item or from Project Settings → Boards → Areas or Iterations.
+- Important: In JSON, backslash is an escape character. Azure DevOps Area and Iteration Paths use backslashes (\\) to denote hierarchy. To represent a literal backslash in JSON you must escape it as \\\\.
 
 ## Credits ##
 
