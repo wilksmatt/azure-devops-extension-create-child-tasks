@@ -146,39 +146,62 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
 
             var newWorkItem = createWorkItemFromTemplate(currentWorkItem, taskTemplate, teamSettings);
 
-            witClient.createWorkItem(newWorkItem, VSS.getWebContext().project.name, taskTemplate.workItemTypeName)
-                .then(function (response) {
-                    //Add relation
+            return witClient.createWorkItem(newWorkItem, VSS.getWebContext().project.name, taskTemplate.workItemTypeName)
+                .then(function (created) {
+                    // Add relation to the parent and then save the parent form
                     if (service != null) {
-                        service.addWorkItemRelations([
-                            {
-                                rel: "System.LinkTypes.Hierarchy-Forward",
-                                url: response.url,
-                            }]);
-                        //Save
-                        service.beginSaveWorkItem(function (response) {
-                            //WriteLog(" Saved");
-                        }, function (error) {
-                            ShowDialog(" Error saving: " + response);
+                        // Wrap addWorkItemRelations to normalize return type (some SDKs don't support .catch)
+                        return Q.Promise(function (resolve, reject) {
+                            try {
+                                var relResult = service.addWorkItemRelations([
+                                    { rel: "System.LinkTypes.Hierarchy-Forward", url: created.url }
+                                ]);
+                                if (relResult && typeof relResult.then === 'function') {
+                                    // Use then(success, error) to support jQuery/Q-style promises
+                                    relResult.then(function () { resolve(); }, function (e) { reject(e); });
+                                } else {
+                                    // Synchronous/no promise
+                                    resolve();
+                                }
+                            } catch (e) {
+                                reject(e);
+                            }
+                        }).then(function () {
+                            // Prefer save() which returns a promise to avoid race conditions on first run
+                            if (typeof service.save === 'function') {
+                                return service.save();
+                            }
+                            // Fallback to beginSaveWorkItem if save() is not available
+                            return Q.Promise(function (resolve, reject) {
+                                try {
+                                    service.beginSaveWorkItem(function () { resolve(); }, function (error) { reject(error); });
+                                } catch (e) { reject(e); }
+                            });
+                        }, function (err) {
+                            var msg = (err && (err.message || err.statusText)) ? (err.message || err.statusText) : (typeof err === 'string' ? err : JSON.stringify(err));
+                            var tName = (taskTemplate && taskTemplate.name) ? ('"' + taskTemplate.name + '"') : 'unknown';
+                            var tId = (taskTemplate && taskTemplate.id) ? taskTemplate.id : 'n/a';
+                            WriteLog('Failed to add relation for template ' + tName + ' (id: ' + tId + '): ' + msg);
+                            // Re-throw to be handled by upstream catch
+                            throw err;
                         });
                     } else {
-                        //save using RestClient
-                        var workItemId = currentWorkItem['System.Id']
+                        // Save using REST client by updating relations on the parent work item
+                        var workItemId = currentWorkItem['System.Id'];
                         var document = [{
                             op: "add",
                             path: '/relations/-',
                             value: {
                                 rel: "System.LinkTypes.Hierarchy-Forward",
-                                url: response.url,
+                                url: created.url,
                                 attributes: {
                                     isLocked: false,
                                 }
                             }
                         }];
 
-                        witClient.updateWorkItem(document, workItemId)
-                            .then(function (response) {
-                                var a = response;
+                        return witClient.updateWorkItem(document, workItemId)
+                            .then(function () {
                                 VSS.getService(VSS.ServiceIds.Navigation).then(function (navigationService) {
                                     navigationService.reload();
                                 });
@@ -247,14 +270,24 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
 
         function createChildFromTemplate(witClient, service, currentWorkItem, template, teamSettings) {
             return function () {
-                return getTemplate(template.id).then(function (taskTemplate) {
-                    // Create child
-                    if (IsValidTemplateWIT(currentWorkItem, taskTemplate)) {
-                        if (IsValidTemplateTitle(currentWorkItem, taskTemplate)) {
-                            createWorkItem(service, currentWorkItem, taskTemplate, teamSettings)
+                return getTemplate(template.id)
+                    .then(function (taskTemplate) {
+                        // Create child when filters match
+                        if (IsValidTemplateWIT(currentWorkItem, taskTemplate) && IsValidTemplateTitle(currentWorkItem, taskTemplate)) {
+                            // Return the promise so the chain waits and errors are handled upstream
+                            return createWorkItem(service, currentWorkItem, taskTemplate, teamSettings);
                         }
-                    }
-                });
+                        // No-op: maintain chain with a resolved promise
+                        return Q.when();
+                    })
+                    .catch(function (err) {
+                        // Swallow to avoid noisy unhandled rejections in console; log for diagnostics
+                        var msg = (err && (err.message || err.statusText)) ? (err.message || err.statusText) : (typeof err === 'string' ? err : JSON.stringify(err));
+                        var tName = (template && template.name) ? ('"' + template.name + '"') : 'unknown';
+                        var tId = (template && template.id) ? template.id : 'n/a';
+                        WriteLog('Failed to create child from template ' + tName + ' (id: ' + tId + '): ' + msg);
+                        return Q.when();
+                    });
             };
         }
 
@@ -269,7 +302,10 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
         function IsValidTemplateWIT(currentWorkItem, taskTemplate) {
 
             // Try to extract a JSON object from the template description
-            var extracted = extractJSON(taskTemplate.description);
+            var extracted = extractJSON(
+                taskTemplate.description,
+                'template "' + (taskTemplate && taskTemplate.name ? taskTemplate.name : 'unknown') + '" (id: ' + (taskTemplate && taskTemplate.id ? taskTemplate.id : 'n/a') + ')'
+            );
             var jsonFilters = extracted && extracted[0];
 
             // Proceed only if we have an object with an array applywhen
@@ -320,7 +356,10 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             // Title filtering is handled within JSON rules via IsValidTemplateWIT/matchField('System.Title').
             // For non-JSON descriptions (basic bracket syntax), there is no title filter. Always allow.
             try {
-                var extracted = extractJSON(taskTemplate && taskTemplate.description ? taskTemplate.description : "");
+                var extracted = extractJSON(
+                    taskTemplate && taskTemplate.description ? taskTemplate.description : "",
+                    'template "' + (taskTemplate && taskTemplate.name ? taskTemplate.name : 'unknown') + '" (id: ' + (taskTemplate && taskTemplate.id ? taskTemplate.id : 'n/a') + ')'
+                );
                 var hasJson = extracted && extracted[0] && typeof extracted[0] === 'object';
                 return true; // JSON case handled elsewhere; basic mode has no title filter
             } catch (e) {
@@ -402,35 +441,46 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             return 0; //default return value (no sorting)
         }
 
-        function extractJSON(str) {
-            var firstOpen, firstClose, candidate;
-            firstOpen = str.indexOf('{', firstOpen + 1);
-            //console.log('firstopen: ', firstOpen);
+        function extractJSON(str, contextLabel) {
+            var firstOpen = -1, firstClose = -1, candidate;
+            var attempts = 0;
+            var lastError = null;
+            var contextMsg = contextLabel ? (' for ' + contextLabel) : '';
+            firstOpen = str.indexOf('{');
             if (firstOpen != -1) {
                 do {
                     firstClose = str.lastIndexOf('}');
-                    //console.log('firstOpen: ' + firstOpen, 'firstClose: ' + firstClose);
                     if (firstClose <= firstOpen) {
+                        if (attempts > 0) {
+                            WriteLog('extractJSON: failed to parse JSON' + contextMsg + ' after ' + attempts + ' attempts. Last error: ' + lastError);
+                        }
                         return null;
                     }
                     do {
                         candidate = str.substring(firstOpen, firstClose + 1);
-                        //console.log('candidate: ' + candidate);
                         try {
                             var res = JSON.parse(candidate);
-                            //console.log('...found');
                             return [res, firstOpen, firstClose + 1];
                         }
                         catch (e) {
-                            console.log('...failed');
+                            attempts++;
+                            lastError = (e && e.message) ? e.message : e;
                         }
                         firstClose = str.substr(0, firstClose).lastIndexOf('}');
                     } while (firstClose > firstOpen);
                     firstOpen = str.indexOf('{', firstOpen + 1);
                 } while (firstOpen != -1);
-            } else { return null; }
+                // Exhausted search without success
+                if (attempts > 0) {
+                    WriteLog('extractJSON: failed to parse JSON' + contextMsg + ' after ' + attempts + ' attempts. Last error: ' + lastError);
+                }
+                return null;
+            } else {
+                return null;
+            }
         }
 
+        // TODO: Remove if no longer used
         function IsJsonString(str) {
             try {
                 JSON.parse(str);
@@ -560,6 +610,10 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
         }
 
         function WriteLog(msg) {
+            // Log by default. If __DEV__ is defined and false (production bundle), suppress logs.
+            try {
+                if (typeof __DEV__ !== 'undefined' && !__DEV__) return;
+            } catch (e) { /* ignore */ }
             console.log('Create Child Tasks: ' + msg);
         }
 
