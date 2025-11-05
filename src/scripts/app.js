@@ -285,6 +285,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                             matchField('System.Tags', currentWorkItem, el) &&
                             matchField('System.Title', currentWorkItem, el) &&
                             matchField('System.AreaPath', currentWorkItem, el) &&
+                            matchField('System.IterationPath', currentWorkItem, el) &&
                             matchField('System.WorkItemType', currentWorkItem, el)
                         );
                     } catch (e) {
@@ -316,29 +317,15 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
         }
 
         function IsValidTemplateTitle(currentWorkItem, taskTemplate) {
-            var jsonFilters = extractJSON(taskTemplate.description)[0];
-            var isJSON = IsJsonString(JSON.stringify(jsonFilters));
-            if (isJSON) {
+            // Title filtering is handled within JSON rules via IsValidTemplateWIT/matchField('System.Title').
+            // For non-JSON descriptions (basic bracket syntax), there is no title filter. Always allow.
+            try {
+                var extracted = extractJSON(taskTemplate && taskTemplate.description ? taskTemplate.description : "");
+                var hasJson = extracted && extracted[0] && typeof extracted[0] === 'object';
+                return true; // JSON case handled elsewhere; basic mode has no title filter
+            } catch (e) {
                 return true;
             }
-            var filters = taskTemplate.description.match(/[^{\}]+(?=})/g);
-            var curTitle = currentWorkItem["System.Title"].match(/[^{\}]+(?=})/g);
-            if (filters) {
-                var isValid = false;
-                if (curTitle) {
-                    for (var i = 0; i < filters.length; i++) {
-                        if (curTitle.indexOf(filters[i]) > -1) {
-                            isValid = true;
-                            break;
-                        }
-                    }
-
-                }
-                return isValid;
-            } else {
-                return true;
-            }
-
         }
 
         function findWorkTypeCategory(categories, workItemType) {

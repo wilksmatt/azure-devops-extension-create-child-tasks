@@ -26,30 +26,49 @@ Put the list of applicable parent work item types in the child Task template's d
 
 #### Advanced ####
 
-Put a minified (single line) JSON string into the child Task template's description field, like this:
+Put a minified (single line) JSON string into the child Task template's description field. Supported fields and behaviors:
 
-``` json
+- System.WorkItemType: Single value or array (OR). Case-insensitive exact match.
+- System.State: Single value or array (OR). Case-insensitive exact match.
+- System.BoardColumn: Single value or array (OR). Case-insensitive exact match.
+- System.BoardLane: Single value or array (OR). Case-insensitive exact match.
+- System.Title: Wildcard string (e.g., "*API*"). To match multiple patterns, use multiple rule objects in `applywhen` (OR across rules).
+- System.Tags: Single value or array. Arrays require all tags to be present (AND). For tag OR, use multiple rule objects in `applywhen`.
+- System.AreaPath: Single value or array (OR). Exact path match (case-insensitive), no wildcards. Remember to escape backslashes in JSON.
+- System.IterationPath: Single value or array (OR). Exact path match (case-insensitive), no wildcards. Remember to escape backslashes in JSON.
+
+Example with all supported fields and OR logic:
+
+```json
 {
     "applywhen": [
-    {
-        "System.State": "Approved",
-        "System.Tags" : ["Blah", "ClickMe"],
-        "System.WorkItemType": "Product Backlog Item",
-        "System.AreaPath": "Root\\Sub Path\\Another Sub Path"
-    },
-    {
-        "System.BoardColumn": "Testing",
-        "System.BoardLane": "Expedite",
-        "System.State": "Custom State",
-        "System.Title": "Repeatable item",
-        "System.WorkItemType": "Custom Type"
-    }]
+        {
+            "System.WorkItemType": ["Product Backlog Item", "Bug"],
+            "System.State": ["Approved", "Committed"],
+            "System.BoardColumn": ["Development", "Testing"],
+            "System.BoardLane": ["Expedite", "Default"],
+            "System.Title": "*API*",
+            "System.Tags": ["Security", "Backend"],
+            "System.AreaPath": [
+                "Project\\Area Path\\Sub Path",
+                "Project\\Area Path"
+            ],
+            "System.IterationPath": [
+                "Project\\Iteration\\Sprint 1",
+                "Project\\Iteration\\Sprint 2"
+            ]
+        },
+        {
+            "System.WorkItemType": "User Story",
+            "System.Title": "*Integration*"
+        }
+    ]
 }
 ```
 
 ### Applying Child Tasks ###
 
-Find and select the *Create Child Tasks* option on the toolbar menu of the parent work item (E.g. Product Backlog Item, User Story, Bug).
+Find and select the *Create Child Tasks* option on the toolbar menu of the parent work item (e.g., Product Backlog Item, User Story, Bug).
 
 ![Export](img/create-child-tasks-screenshot-work-item-menu-item.png)
 
@@ -59,29 +78,30 @@ You should now have children associated with the open work item.
 
 ### Ordering Child Tasks ###
 
-By default, the child Tasks are created and orderd alphabetically by the Task template *name* field. If you would like to customize the order of how the tasks show up in the work item then you can name the Task template with numbers. 
+By default, the child Tasks are created and ordered alphabetically by the Task template name. If you want to customize the order, prefix template names with numbers.
 
 ![Export](img/create-child-tasks-screenshot-manage-templates-order.png)
 
-When creating the tasks with the extension, the tasks will then show up in the same order in the work item.
+When creating the tasks with the extension, the tasks will show up in the same order in the work item.
 
 ![Export](img/create-child-tasks-screenshot-board-work-item-tasks.png)
 
 ### Using 'Wildcards' for Title Filter Rules ###
 
-You might want to apply a child task to a parent work item if the parent work item *title* matches *completely* or only *partially*. It's possible to compare the parent work item *title* by using a *wildcard* string as the filter rule and using the asterick character ("*").
+You can apply a child task if the parent work item title matches completely or partially. Use a wildcard string in the filter rule with the asterisk character ("*").
 
-``` json
+```json
 {
     "applywhen": [
-    {
-        "System.WorkItemType": "Product Backlog Item",
-        "System.Title": "*WildcardString*"
-    }]
+        {
+            "System.WorkItemType": "Product Backlog Item",
+            "System.Title": "*WildcardString*"
+        }
+    ]
 }
 ```
 
-The following are examples of how the wildcard comparison can be used:
+Wildcard examples:
 
 ```
 - "a*"      Everything that starts with "a"
@@ -90,6 +110,84 @@ The following are examples of how the wildcard comparison can be used:
 - "*a*"     Everything that has an "a" in it
 - "*a*b*"   Everything that has an "a" in it, followed by anything, followed by a "b", followed by anything
 ```
+
+### Using arrays for multiple values (OR) ###
+
+Most fields accept either a single value or an array of values. When you provide an array, any one value may match (logical OR). This is useful when the same template should apply to several states, types, or other field values.
+
+Example (multiple allowed values):
+
+```json
+{
+    "applywhen": [
+        {
+            "System.WorkItemType": ["Product Backlog Item", "Bug"],
+            "System.State": ["Approved", "Committed", "In Progress"],
+            "System.IterationPath": [
+                "Project\\Iteration\\Sprint 1",
+                "Project\\Iteration\\Sprint 2"
+            ]
+        }
+    ]
+}
+```
+
+Notes and exceptions:
+- System.Title: Use a single wildcard string (e.g., "*API*"). To match multiple title patterns, add multiple rule objects in `applywhen` (OR across rules).
+- System.Tags: Arrays here mean all listed tags must be present on the parent (logical AND). For example, ["Security", "Backend"] requires both tags. For tag OR, use separate rule objects in `applywhen` (rules are combined with OR):
+
+    ```json
+    {
+        "applywhen": [
+            { "System.WorkItemType": "User Story", "System.Tags": "Security" },
+            { "System.WorkItemType": "User Story", "System.Tags": "Backend" }
+        ]
+    }
+    ```
+
+### Filtering by AreaPath and IterationPath ###
+
+You can target templates to specific Area or Iteration Paths using the advanced JSON rules in a template's Description. The value must match the parent work item’s corresponding field (case-insensitive) and supports either a single value or an array of allowed values.
+
+- Example (single AreaPath and IterationPath):
+
+```json
+{
+    "applywhen": [
+        {
+            "System.WorkItemType": "Product Backlog Item",
+            "System.AreaPath": "Project\\Area Path\\Sub Path",
+            "System.IterationPath": "Project\\Iteration\\Sprint 1"
+        }
+    ]
+}
+```
+
+- Example (multiple AreaPaths and IterationPaths – any-of will match):
+
+```json
+{
+    "applywhen": [
+        {
+            "System.WorkItemType": "Product Backlog Item",
+            "System.AreaPath": [
+                "Project\\Area Path\\Sub Path",
+                "Project\\Area Path"
+            ],
+            "System.IterationPath": [
+                "Project\\Iteration\\Sprint 1",
+                "Project\\Iteration\\Sprint 2"
+            ]
+        }
+    ]
+}
+```
+
+Behavior notes:
+- Matching is case-insensitive, but paths must otherwise match exactly (no wildcards on AreaPath/IterationPath).
+- To include multiple sub-areas/iterations, list each full path explicitly in the array.
+- Tip: Copy the exact Area or Iteration Path from a work item or from Project Settings → Boards → Areas or Iterations.
+- Important: In JSON, backslash is an escape character. Azure DevOps Area and Iteration Paths use backslashes (\\) to denote hierarchy. To represent a literal backslash in JSON you must escape it as \\\\.
 
 ## Credits ##
 
