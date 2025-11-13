@@ -16,6 +16,11 @@
                 command: "tfx extension create  --manifests vss-extension.json --overrides-file configs/release.json --output-path ../dist",
                 stdout: true,
                 stderr: true
+            },
+            package_release_test: {
+                command: "tfx extension create  --manifests vss-extension.json --overrides-file configs/release-test.json --output-path ../dist",
+                stdout: true,
+                stderr: true
             }
         },
         copy: {
@@ -42,6 +47,7 @@
     // Default task(s)
     grunt.registerTask("package-dev", ["exec:package_dev"]);
     grunt.registerTask("package-release", ["exec:package_release"]);
+    grunt.registerTask("package-release-test", ["exec:package_release_test"]);
 
     // Custom publish task with interactive PAT input if not set in env
     grunt.registerTask('publish-dev', 'Publish Azure DevOps extension', function () {

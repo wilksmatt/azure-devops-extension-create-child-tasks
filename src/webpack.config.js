@@ -78,13 +78,6 @@ module.exports = (env, argv) => {
 
     // Quieter output by default; adjust as needed
     stats: 'minimal',
-
-    plugins: [
-      // Expose a simple dev/prod flag to the bundle
-      new webpack.DefinePlugin({
-        __DEV__: JSON.stringify(!isProd),
-      }),
-    ],
   };
 
   // Only enable devServer during development (`webpack serve`)
