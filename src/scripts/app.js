@@ -610,10 +610,6 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
         }
 
         function WriteLog(msg) {
-            // Log by default. If __DEV__ is defined and false (production bundle), suppress logs.
-            try {
-                if (typeof __DEV__ !== 'undefined' && !__DEV__) return;
-            } catch (e) { /* ignore */ }
             console.log('Create Child Tasks: ' + msg);
         }
 
