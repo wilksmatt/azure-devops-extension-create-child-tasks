@@ -28,14 +28,14 @@ Put the list of applicable parent work item types in the child Task template's d
 
 Put a minified (single line) JSON string into the child Task template's description field. Supported fields and behaviors:
 
-- System.WorkItemType: Single value or array (OR). Case-insensitive exact match.
-- System.State: Single value or array (OR). Case-insensitive exact match.
-- System.BoardColumn: Single value or array (OR). Case-insensitive exact match.
-- System.BoardLane: Single value or array (OR). Case-insensitive exact match.
-- System.Title: Wildcard string (e.g., "*API*"). To match multiple patterns, use multiple rule objects in `applywhen` (OR across rules).
-- System.Tags: Single value or array. Arrays require all tags to be present (AND). For tag OR, use multiple rule objects in `applywhen`.
-- System.AreaPath: Single value or array (OR). Exact path match (case-insensitive), no wildcards. Remember to escape backslashes in JSON.
-- System.IterationPath: Single value or array (OR). Exact path match (case-insensitive), no wildcards. Remember to escape backslashes in JSON.
+- System.WorkItemType
+- System.State
+- System.BoardColumn
+- System.BoardLane
+- System.Title
+- System.Tags
+- System.AreaPath
+- System.IterationPath
 
 Example with all supported fields and OR logic:
 
