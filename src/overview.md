@@ -12,28 +12,7 @@ Create Child Tasks adds a toolbar action to Azure DevOps work items that instant
 
 1. Install the extension at your Azure DevOps organization (org-level install; once installed it is available to all projects in that organization / collection).
 2. Define one or more Task templates for your team (Project Settings → Boards → Team Configuration → Templates).
-3. Open a parent work item (User Story / PBI / Bug) and choose "Create Child Tasks" from the toolbar — child Tasks will be created from matching templates.
-
-If you want to test locally with the dev server, see README: ../readme.md
-
-## Who is this for
-
-- Teams that use Azure DevOps work item templates and want to create multiple Task children from a parent with a single action.
-- Requires a team-level Task template(s) configured in Project → Boards → Templates.
-- Tested with Azure DevOps Services and recent on-premise Server releases (use Node 16 tooling for local builds). Ensure you have permission to create work items in the project.
-
-## Supported fields & limitations (summary)
-
-Supported filter fields (in template Description JSON):
-- System.WorkItemType, System.State, System.BoardColumn, System.BoardLane, System.Title, System.Tags, System.AreaPath, System.IterationPath
-
-Notes:
-- System.Tags in filters requires all listed tags (AND). Use multiple rules for OR.
-- AreaPath/IterationPath must match full path strings (case-insensitive). Escape backslashes in JSON (\\).
-- Wildcards supported for System.Title only (use * characters).
-- Special token values in templates supported: @me (AssignedTo), @currentiteration (IterationPath). See examples.
-
----
+3. Open a parent work item (User Story / PBI / Bug) and choose "Create Child Tasks" from the toolbar — child work items will be created from matching templates.
 
 ## How-To Guide
 
@@ -63,6 +42,17 @@ Key behaviors:
 - Title supports wildcards (*) and is case-insensitive.
 - Tags as an array means all listed tags must be present (AND). For tag OR, add separate applywhen entries.
 - Multiple applywhen entries = OR (any entry matching will apply the template).
+
+### Supported fields & limitations (summary)
+
+Supported filter fields (in template Description JSON):
+- System.WorkItemType, System.State, System.BoardColumn, System.BoardLane, System.Title, System.Tags, System.AreaPath, System.IterationPath
+
+Notes:
+- System.Tags in filters requires all listed tags (AND). Use multiple rules for OR.
+- AreaPath/IterationPath must match full path strings (case-insensitive). Escape backslashes in JSON (\\).
+- Wildcards supported for System.Title only (use * characters).
+- Special token values in templates supported: @me (AssignedTo), @currentiteration (IterationPath). See examples.
 
 ### Applying Child Tasks
 - Open a parent work item.
@@ -144,6 +134,4 @@ A: No. Azure DevOps Services installs extensions at the organization level (Azur
 
 ## Credits
 
-Cloned from https://github.com/figueiredorui/1-click-child-links
-
-<!-- end of overview.md -->
+Originally cloned from https://github.com/figueiredorui/1-click-child-links
