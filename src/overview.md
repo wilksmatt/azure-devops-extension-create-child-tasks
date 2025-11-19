@@ -17,19 +17,22 @@ Create Child Tasks adds a toolbar action to Azure DevOps work items that instant
 ## How-To Guide
 
 ### Defining Task Templates
-Create Task templates via Project → Boards → Templates. The template's Description is used for filtering rules. Two formats are supported:
+Create Task templates via Project Settings → Boards → Team Configuration → Templates. The template's Description is used for filtering rules. Two formats are supported:
 
-- Basic: square-bracket list of parent work item types
-  Example: [Product Backlog Item, Bug]
+- [Basic Filter](#basic-filter-simple): Square-bracket list of parent work item types. Example: [Product Backlog Item, Bug]
+- [Advanced Filter](#advanced-filter-json): Single-line minified JSON with an applywhen array (see below)
 
-- Advanced: single-line minified JSON with an applywhen array (see below)
+**TODO:** Add screenshot showing where to enter the template Description (Project Settings → Boards → Team Configuration → Templates).
 
-### Basic filter (simple)
-Place a bracketed list of parent types in the template Description:
+![TODO: add screenshot of Templates → Template Description input](./assets/screenshot-templates-description.png)
+
+### Basic Filter (Simple)
+Place a bracketed list of parent types in the template Description. This will apply the template for those parent types.
+```
 [Product Backlog Item, Bug]
-This will apply the template for those parent types.
+```
 
-### Advanced filter (JSON)
+### Advanced Filter (JSON)
 Put a single-line JSON object containing an "applywhen" array into the template Description. Each entry in applywhen is evaluated as OR; fields inside an entry are combined as AND.
 
 Ready-to-copy example:
