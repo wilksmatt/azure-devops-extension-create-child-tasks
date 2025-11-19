@@ -111,23 +111,23 @@ How to diagnose:
 
 ## FAQ
 
-Q: How do I match templates for multiple states or types?
-A: Use arrays in the JSON for that field (e.g., "System.State":["Approved","Committed"]).
+- Q: How do I match templates for multiple states or types?
+- A: Use arrays in the JSON for that field (e.g., "System.State":["Approved","Committed"]).
 
-Q: Can I use wildcards on Area/Iteration?
-A: No — AreaPath and IterationPath require exact full paths (case-insensitive).
+- Q: Can I use wildcards on Area/Iteration?
+- A: No — AreaPath and IterationPath require exact full paths (case-insensitive).
 
-Q: How do I make tags match either A or B?
-A: Add multiple applywhen entries, one per tag, to produce an OR effect.
+- Q: How do I make tags match either A or B?
+- A: Add multiple applywhen entries, one per tag, to produce an OR effect.
 
-Q: How are AssignedTo and Iteration special tokens handled?
-A: Use @me in a template field to assign to the current user; use @currentiteration to use the team's current iteration (handled at creation time).
+- Q: How are AssignedTo and Iteration special tokens handled?
+- A: Use @me in a template field to assign to the current user; use @currentiteration to use the team's current iteration (handled at creation time).
 
-Q: Can I enable the extension for only some projects?
-A: No. Azure DevOps Services installs extensions at the organization level (Azure DevOps Server: collection level). They become available to all projects in that scope. To restrict usage you’d need to control permissions or uninstall/disable the extension at the org level.
+- Q: Can I enable the extension for only some projects?
+- A: No. Azure DevOps Services installs extensions at the organization level (Azure DevOps Server: collection level). They become available to all projects in that scope. To restrict usage you’d need to control permissions or uninstall/disable the extension at the org level.
 
-Q: Why is the child work item title the same as the parent work item? How do I specify the title?
-A: If the Task template does not define System.Title the extension copies the parent’s title. To set a custom title, add the System.Title field to the Task template with the desired text.
+- Q: Why is the child work item title the same as the parent work item? How do I specify the title?
+- A: If the Task template does not define System.Title the extension copies the parent’s title. To set a custom title, add the System.Title field to the Task template with the desired text.
 
 ---
 
