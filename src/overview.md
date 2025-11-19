@@ -6,12 +6,12 @@ Quick links: [Overview](#overview) • [Quick Start](#quick-start) • [How-To](
 
 Tired of manually creating the same set of child work items for each parent work item — what if you could generate them instantly from team-defined templates?
 
-Create Child Tasks adds a toolbar action to Azure DevOps work items that instantly creates multiple child tasks (or any other child work item types) from a parent work item using team-defined Templates. Templates are matched by simple rules or JSON filters (type, state, title wildcards, tags, area/iteration, etc.), and child work items are automatically created.
+Create Child Tasks adds a toolbar action to Azure DevOps work items that instantly creates multiple child tasks (or any other child work item types) from a parent work item using team-defined Templates. Templates are matched by simple rules or JSON filters (type, state, title wildcards, tags, area/iteration, etc.), and the corresponding child work items are automatically created.
 
 ## Quick Start
 
-1. Install or load the extension in your Azure DevOps project (use the VSIX from dist or install from Marketplace).
-2. Define one or more Task templates for your team (Project → Boards → Templates).
+1. Install the extension at your Azure DevOps organization (org-level install; once installed it is available to all projects in that organization / collection).
+2. Define one or more Task templates for your team (Project Settings → Boards → Team Configuration → Templates).
 3. Open a parent work item (User Story / PBI / Bug) and choose "Create Child Tasks" from the toolbar — child Tasks will be created from matching templates.
 
 If you want to test locally with the dev server, see README: ../readme.md
@@ -129,6 +129,9 @@ A: Add multiple applywhen entries, one per tag, to produce an OR effect.
 
 Q: How are AssignedTo and Iteration special tokens handled?
 A: Use @me in a template field to assign to the current user; use @currentiteration to use the team's current iteration (handled at creation time).
+
+Q: Can I enable the extension for only some projects?
+A: No. Azure DevOps Services installs extensions at the organization level (Azure DevOps Server: collection level). They become available to all projects in that scope. To restrict usage you’d need to control permissions or uninstall/disable the extension at the org level.
 
 ---
 
