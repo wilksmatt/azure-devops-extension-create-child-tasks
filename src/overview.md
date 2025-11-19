@@ -126,9 +126,12 @@ A: Use @me in a template field to assign to the current user; use @currentiterat
 Q: Can I enable the extension for only some projects?
 A: No. Azure DevOps Services installs extensions at the organization level (Azure DevOps Server: collection level). They become available to all projects in that scope. To restrict usage you’d need to control permissions or uninstall/disable the extension at the org level.
 
+Q: Why is the child work item title the same as the parent work item? How do I specify the title?
+A: If the Task template does not define System.Title the extension copies the parent’s title. To set a custom title, add the System.Title field to the Task template with the desired text.
+
 ---
 
-## Examples & Tips (short)
+## Examples & Tips
 
 - Control order: prefix names with numbers.
 - Use extractable fields in template body via {FieldName} references (e.g., {System.Title}) to copy values from parent into template fields.
