@@ -19,8 +19,6 @@ Create Child Tasks adds a toolbar action to Azure DevOps work items that instant
 ### Defining Task Templates
 Create Task templates via Project Settings → Boards → Team Configuration → Templates. 
 
-**TODO:** Add screenshot showing where to enter the template Description (Project Settings → Boards → Team Configuration → Templates).
-
 ![ADO Project Task Templates](img/create-child-tasks-screenshot-manage-templates.png)
 
 The template's Description is used for filtering rules. Two formats are supported:
