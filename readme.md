@@ -8,7 +8,7 @@ The child Task work items created by this extension are based on the hierarchy o
 
 See the full feature walkthrough, configuration tips, and examples in the extension overview: [Extension Overview](./overview.md).
 
-## Developer Usage ##
+## Developer Guide ##
 
 ### Prerequisites
 
