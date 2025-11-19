@@ -17,14 +17,16 @@ Create Child Tasks adds a toolbar action to Azure DevOps work items that instant
 ## How-To Guide
 
 ### Defining Task Templates
-Create Task templates via Project Settings → Boards → Team Configuration → Templates. The template's Description is used for filtering rules. Two formats are supported:
-
-- [Basic Filter](#basic-filter-simple): Square-bracket list of parent work item types. Example: [Product Backlog Item, Bug]
-- [Advanced Filter](#advanced-filter-json): Single-line minified JSON with an applywhen array (see below)
+Create Task templates via Project Settings → Boards → Team Configuration → Templates. 
 
 **TODO:** Add screenshot showing where to enter the template Description (Project Settings → Boards → Team Configuration → Templates).
 
-![TODO: add screenshot of Templates → Template Description input](./assets/screenshot-templates-description.png)
+![ADO Project Task Templates](img/create-child-tasks-screenshot-manage-templates.png)
+
+The template's Description is used for filtering rules. Two formats are supported:
+
+- [Basic Filter](#basic-filter-simple): Square-bracket list of parent work item types. Example: [Product Backlog Item, Bug]
+- [Advanced Filter](#advanced-filter-json): Single-line minified JSON with an applywhen array (see below)
 
 ### Basic Filter (Simple)
 Place a bracketed list of parent types in the template Description. This will apply the template for those parent types.
