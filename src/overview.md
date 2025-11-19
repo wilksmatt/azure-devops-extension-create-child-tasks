@@ -1,10 +1,10 @@
 # Create Child Tasks
 
-Quick links: [Quick Start](#quick-start) • [How-To](#how-to-guide) • [Examples](#examples) • [Troubleshooting](#troubleshooting) • [FAQ](#faq) • [Credits](#credits)
+Quick links: [Overview](#overview) • [Quick Start](#quick-start) • [How-To](#how-to-guide) • [Examples](#examples) • [Troubleshooting](#troubleshooting) • [FAQ](#faq) • [Credits](#credits)
 
 ## Overview
 
-Tired of manually creating the same set of child tasks for each parent work item — what if you could generate them instantly from team-defined templates?
+Tired of manually creating the same set of child work items for each parent work item — what if you could generate them instantly from team-defined templates?
 
 Create Child Tasks adds a toolbar action to Azure DevOps work items that instantly creates multiple child tasks (or any other child work item types) from a parent work item using team-defined Templates. Templates are matched by simple rules or JSON filters (type, state, title wildcards, tags, area/iteration, etc.), and child work items are automatically created.
 
