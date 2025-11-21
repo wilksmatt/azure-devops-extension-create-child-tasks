@@ -75,10 +75,12 @@ Notes:
 - AreaPath/IterationPath must match full path strings (case-insensitive). Escape backslashes in JSON (\\).
 - Special token values in templates are supported: @me (AssignedTo), @currentiteration (IterationPath).
 
-### Applying Child Tasks
+### Applying Child Work Items
 - Open a parent work item.
 - Select "Create Child Tasks" from the toolbar.
-- The extension finds matching Task templates and creates child Tasks in alphabetical order by template name (prefix names with numbers to control order).
+- The extension finds matching Task templates and creates child Tasks.
+
+![Create Child Work Items](img/create-child-tasks-screenshot-work-item-menu-item.png)
 
 ### Ordering
 - Templates are sorted alphabetically by name before creation. Use numeric prefixes (01-, 02-) to control ordering.
