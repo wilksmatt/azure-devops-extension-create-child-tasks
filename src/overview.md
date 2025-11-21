@@ -37,7 +37,7 @@ Place a bracketed list of parent types in the template Description. This will ap
 ### Advanced Filter (JSON)
 Put a single-line JSON object containing an "applywhen" array into the template Description. Each entry in applywhen is evaluated as OR; fields inside an entry are combined as AND.
 
-Example:
+#### Example
 ```json
 {
   "applywhen": [
@@ -55,7 +55,7 @@ Example:
 }
 ```
 
-### Supported Fields
+#### Supported Fields
 
 Supported filter fields (in template Description JSON):
 - System.WorkItemType
