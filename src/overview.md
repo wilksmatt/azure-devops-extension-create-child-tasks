@@ -37,27 +37,43 @@ Place a bracketed list of parent types in the template Description. This will ap
 ### Advanced Filter (JSON)
 Put a single-line JSON object containing an "applywhen" array into the template Description. Each entry in applywhen is evaluated as OR; fields inside an entry are combined as AND.
 
-Ready-to-copy example:
+Example:
 ```json
-{"applywhen":[{"System.WorkItemType":["Product Backlog Item","Bug"],"System.State":["Approved","Committed"],"System.Title":"*API*","System.Tags":["Security","Backend"],"System.AreaPath":["Project\\\\Area Path"],"System.IterationPath":["Project\\\\Iteration\\\\Sprint 1"]}]}
+{
+  "applywhen": [
+    {
+      "System.WorkItemType": "Product Backlog Item",
+      "System.State": [ "New", "Approved" ],
+      "System.BoardColumn": "Development",
+      "System.BoardLane": "Expedite",
+      "System.Title": "*Mobile*",
+      "System.Tags": [ "Tag1", "Tag2" ],
+      "System.AreaPath": "Project\\Area 1",
+      "System.IterationPath": "Project\\Iteration\\Sprint 1"
+    }
+  ]
+}
 ```
 
-Key behaviors:
+### Supported Fields
+
+Supported filter fields (in template Description JSON):
+- System.WorkItemType
+- System.State
+- System.BoardColumn
+- System.BoardLane
+- System.Title
+- System.Tags
+- System.AreaPath
+- System.IterationPath
+
+Notes:
+- Multiple applywhen entries = OR (any entry matching will apply the template).
 - Arrays = OR across values for that field.
 - Title supports wildcards (*) and is case-insensitive.
 - Tags as an array means all listed tags must be present (AND). For tag OR, add separate applywhen entries.
-- Multiple applywhen entries = OR (any entry matching will apply the template).
-
-### Supported fields & limitations (summary)
-
-Supported filter fields (in template Description JSON):
-- System.WorkItemType, System.State, System.BoardColumn, System.BoardLane, System.Title, System.Tags, System.AreaPath, System.IterationPath
-
-Notes:
-- System.Tags in filters requires all listed tags (AND). Use multiple rules for OR.
 - AreaPath/IterationPath must match full path strings (case-insensitive). Escape backslashes in JSON (\\).
-- Wildcards supported for System.Title only (use * characters).
-- Special token values in templates supported: @me (AssignedTo), @currentiteration (IterationPath). See examples.
+- Special token values in templates are supported: @me (AssignedTo), @currentiteration (IterationPath).
 
 ### Applying Child Tasks
 - Open a parent work item.
@@ -76,16 +92,40 @@ Notes:
 
 Minimal JSON example (applies to User Story titles containing "integration"):
 ```json
-{"applywhen":[{"System.WorkItemType":"User Story","System.Title":"*integration*"}]}
+{
+  "applywhen": [
+    {
+      "System.WorkItemType": "User Story",
+      "System.Title": "*integration*"
+    }
+  ]
+}
 ```
 
 Multiple rules (OR across rules, AND within rules):
 ```json
-{"applywhen":[{"System.WorkItemType":"User Story","System.State":["Approved","Committed"]},{"System.WorkItemType":"Bug","System.Tags":"Security"}]}
+{
+  "applywhen": [
+    {
+      "System.WorkItemType": "User Story",
+      "System.State": "Approved"
+    },
+    {
+      "System.WorkItemType": "User Story",
+      "System.State": "Committed"
+    },
+    {
+      "System.WorkItemType": "Bug",
+      "System.Tags": ["Security"]
+    }
+  ]
+}
 ```
 
 Template Description basic example:
+```
 [User Story, Bug]
+```
 
 ---
 
