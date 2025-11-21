@@ -57,7 +57,7 @@ Put a single-line JSON object containing an "applywhen" array into the template 
 
 #### Supported Fields
 
-Supported filter fields (in template Description JSON):
+Currently supported filter fields (in template Description JSON):
 - System.WorkItemType
 - System.State
 - System.BoardColumn
@@ -72,7 +72,7 @@ Notes:
 - Arrays = OR across values for that field.
 - Title supports wildcards (*) and is case-insensitive.
 - Tags as an array means all listed tags must be present (AND). For tag OR, add separate applywhen entries.
-- AreaPath/IterationPath must match full path strings (case-insensitive). Escape backslashes in JSON (\\).
+- AreaPath/IterationPath must match full path strings (case-insensitive). Escape backslashes in JSON (\\\\).
 - Special token values in templates are supported: @me (AssignedTo), @currentiteration (IterationPath).
 
 ### Applying Child Work Items
@@ -172,13 +172,6 @@ A: No. Azure DevOps Services installs extensions at the organization level (Azur
 
 Q: Why is the child work item title the same as the parent work item? How do I specify the title?
 A: If the Task template does not define System.Title the extension copies the parent’s title. To set a custom title, add the System.Title field to the Task template with the desired text.
-
----
-
-## Examples & Tips
-
-- Control order: prefix names with numbers.
-- Use extractable fields in template body via {FieldName} references (e.g., {System.Title}) to copy values from parent into template fields.
 
 ---
 
