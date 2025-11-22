@@ -78,7 +78,7 @@ Notes:
 ### Applying Child Work Items
 - Open a parent work item.
 - Select "Create Child Tasks" from the toolbar.
-- The extension finds matching Task templates and creates child Tasks.
+- The extension finds matching Work Item Templates and creates them as child work items.
 
 ![Create Child Work Items](img/create-child-tasks-screenshot-work-item-menu-item.png)
 
@@ -146,10 +146,6 @@ Template Description basic example:
 
 - Iteration/Area not matching:
   - Use exact full path strings; escape backslashes in JSON (e.g., "Project\\\\Iteration\\\\Sprint 1").
-
-How to diagnose:
-- Open browser DevTools console inside the work item iframe to inspect logs.
-- For local testing with webpack dev server, ensure the dev override points to your local baseUri and trust the self-signed cert.
 
 ---
 
