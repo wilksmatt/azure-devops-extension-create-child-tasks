@@ -182,15 +182,16 @@ Multiple rules (AND across rules, OR within rules)
 ## Troubleshooting
 
 - No templates found:
-  - Verify templates exist for the project team (Project → Boards → Templates) and are Task templates.
-  - Templates are returned per team; ensure ctx.project.id and ctx.team.id correspond to the intended team.
+  - Verify templates exist for the project team (Project Settings → Boards → Team Configuration → Templates). Templates are defined and scoped per team and will only apply to work items for that specific team — they do not apply to other teams even if the user creating the child work items belongs to those teams. If you need the same templates elsewhere, create or copy them for each team (or switch the active team in the web UI to manage that team's templates).
+  - Verify the supported work item types configured for the Project in the Azure DevOps Organization Process settings (Project Settings → Boards → Process → Backlog Levels).
 
-- Tasks not created / permission errors:
+- Work Items not created / permission errors:
   - Confirm you have permission to create work items in the target project.
   - Check browser console logs for error messages from the extension.
 
 - Tags filter not matching:
   - Template tag filters require all listed tags (AND). Use multiple applywhen entries for OR.
+  - Check for malformed JSON in template description. Ensure your JSON is valid. Common issues include trailing commas, missing brackets, or improper escaping of backslashes. Use a JSON validator if unsure.
 
 - Iteration/Area not matching:
   - Use exact full path strings; escape backslashes in JSON (e.g., "Project\\\\Iteration\\\\Sprint 1").
