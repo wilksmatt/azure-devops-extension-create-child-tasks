@@ -54,6 +54,7 @@ Put a single-line JSON object containing an "applywhen" array into the template 
   ]
 }
 ```
+See the [Examples](#examples) section below for a more extensive set of filter examples.
 
 #### Supported Fields
 
@@ -95,7 +96,7 @@ The child work items will be created in the same alphabetical order of the Templ
 
 ### Wildcards for Title
 
-You might want to apply a child work items to a parent work item if the parent work item title matches completely or only partially. It's possible to nmatch the parent work item title by using a wildcard string as the filter rule and using the asterick character ("*").
+You might want to apply a child work items to a parent work item if the parent work item title matches exactly or only partially. It's possible to match the parent work item title by using a wildcard filter rule and using the asterick character ("*").
 
 ```json
 {
@@ -114,6 +115,8 @@ The following are examples of how the wildcard comparison can be used:
 - "*b"      Everything that ends with "b"
 - "*a*"     Everything that has an "a" in it
 - "*a*b*"   Everything that has an "a" in it, followed by anything, followed by a "b", followed by anything
+
+Note: Wildcard filter rules currently only work for the System.Title.
 
 ---
 
