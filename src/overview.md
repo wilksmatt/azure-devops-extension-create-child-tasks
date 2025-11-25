@@ -108,7 +108,7 @@ You might want to apply a child work items to a parent work item if the parent w
 }
 ```
 
-The following are examples of how the wildcard comparison can be used:
+The following are examples of how the wildcard matching can be used:
 ```
 - "a*b"     Everything that starts with "a" and ends with "b"
 - "a*"      Everything that starts with "a"
@@ -117,11 +117,16 @@ The following are examples of how the wildcard comparison can be used:
 - "*a*b*"   Everything that has an "a" in it, followed by anything, followed by a "b", followed by anything
 ```
 
-Note: Wildcard filter rules currently only work for the System.Title.
+Note: Wildcard filter rules currently only work for the System.Title field.
 
 ---
 
 ## Examples
+
+Template Description basic example:
+```
+[User Story, Bug]
+```
 
 Minimal JSON example (applies to User Story titles containing "integration"):
 ```json
@@ -155,9 +160,21 @@ Multiple rules (OR across rules, AND within rules):
 }
 ```
 
-Template Description basic example:
-```
-[User Story, Bug]
+Multiple rules (AND across rules, OR within rules)
+```json
+{
+  "applywhen": [
+    {
+      "System.WorkItemType": ["Product Backlog Item", "User Story"],
+      "System.State": ["New", "Approved", "Committed"],
+      "System.BoardColumn": ["Backlog", "Ready"],
+      "System.BoardLane": ["Default", "Expedite"],
+      "System.Tags": ["Overdue", "Urgent"],
+      "System.AreaPath": ["Project\\Area 1", "Project\\Area 2"],
+      "System.IterationPath": ["Project\\Iteration\\Sprint 1", "Project\\Iteration\\Sprint 2"]
+    }
+  ]
+}
 ```
 
 ---
