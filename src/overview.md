@@ -91,7 +91,7 @@ By default, child work items are created in alphabetical order based on the Temp
 
 The child work items will be created in the same alphabetical order of the Template Name fields. Keep in mind, that title of the child work item is derived by specifiying the System.Title field in the work item template (or the parent work item if the System.Title field is not specified) – it is *not* derived from the Template Name.
 
-![Work Item Templates Order - Results](img/create-child-tasks-screenshot-board-work-item-tasks.png.png)
+![Work Item Templates Order - Results](img/create-child-tasks-screenshot-board-work-item-tasks.png)
 
 ### Wildcards for Title
 
