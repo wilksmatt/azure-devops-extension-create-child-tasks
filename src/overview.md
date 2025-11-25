@@ -82,11 +82,38 @@ Notes:
 
 ![Create Child Work Items](img/create-child-tasks-screenshot-work-item-menu-item.png)
 
+![Create Child Work Items - Results](img/create-child-tasks-screenshot-work-item-tasks.png)
+
 ### Ordering
-- Templates are sorted alphabetically by name before creation. Use numeric prefixes (01-, 02-) to control ordering.
+By default, child work items are created in alphabetical order based on the Template *Name*. To control the creation order, prefix template names with numbers (for example, 01-, 02-).
+
+![Work Item Templates Order - Prefix Template Names with Numbers](img/create-child-tasks-screenshot-manage-templates-order.png)
+
+The child work items will be created in the same alphabetical order of the Template Name fields. Keep in mind, that title of the child work item is derived by specifiying the System.Title field in the work item template (or the parent work item if the System.Title field is not specified) – it is *not* derived from the Template Name.
+
+![Work Item Templates Order - Results](img/create-child-tasks-screenshot-board-work-item-tasks.png.png)
 
 ### Wildcards for Title
-- Use "*" as wildcard in System.Title values (e.g. "*Integration*", "bug *", "API*").
+
+You might want to apply a child work items to a parent work item if the parent work item title matches completely or only partially. It's possible to nmatch the parent work item title by using a wildcard string as the filter rule and using the asterick character ("*").
+
+```json
+{
+    "applywhen": [
+    {
+        "System.WorkItemType": "Product Backlog Item",
+        "System.Title": "*WildcardString*"
+    }]
+}
+```
+
+The following are examples of how the wildcard comparison can be used:
+
+- "a*b"     Everything that starts with "a" and ends with "b"
+- "a*"      Everything that starts with "a"
+- "*b"      Everything that ends with "b"
+- "*a*"     Everything that has an "a" in it
+- "*a*b*"   Everything that has an "a" in it, followed by anything, followed by a "b", followed by anything
 
 ---
 
