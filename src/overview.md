@@ -195,6 +195,9 @@ Multiple rules (AND across rules, OR within rules)
 - Iteration/Area not matching:
   - Use exact full path strings; escape backslashes in JSON (e.g., "Project\\\\Iteration\\\\Sprint 1").
 
+- Child work item title is not set as expected:
+  - The child work item title is determined by the System.Title field in the template. If System.Title is not specified in the template, the extension will copy the parent work item's title to the child. The Template Name is not used as the child work item title.
+
 ---
 
 ## FAQ
