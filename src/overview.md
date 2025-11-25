@@ -217,6 +217,9 @@ A: No. Azure DevOps Services installs extensions at the organization level (Azur
 Q: Why is the child work item title the same as the parent work item? How do I specify the title?
 A: If the Task template does not define System.Title the extension copies the parent’s title. To set a custom title, add the System.Title field to the Task template with the desired text.
 
+Q: What child work item types are supported?  
+A: The extension supports creating *any* child work item type, not just Tasks. The available child types depend on how your process is configured in Azure DevOps Organization Process settings (Project Settings → Boards → Process → Backlog Levels). For example, you can use this extension to create Bugs, Features, or custom types as children, as long as they are defined as valid child types in your process/backlog configuration.
+
 ---
 
 ## Credits
