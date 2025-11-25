@@ -109,12 +109,13 @@ You might want to apply a child work items to a parent work item if the parent w
 ```
 
 The following are examples of how the wildcard comparison can be used:
-
+```
 - "a*b"     Everything that starts with "a" and ends with "b"
 - "a*"      Everything that starts with "a"
 - "*b"      Everything that ends with "b"
 - "*a*"     Everything that has an "a" in it
 - "*a*b*"   Everything that has an "a" in it, followed by anything, followed by a "b", followed by anything
+```
 
 Note: Wildcard filter rules currently only work for the System.Title.
 
