@@ -11,13 +11,13 @@ Create Child Tasks adds a toolbar action to Azure DevOps work items that instant
 ## Quick Start
 
 1. Install the extension at your Azure DevOps organization (org-level install; once installed it is available to all projects in that organization / collection).
-2. Define one or more Task templates for your team (Project Settings → Boards → Team Configuration → Templates).
+2. Define one or more Templates for your team (Project Settings → Boards → Team Configuration → Templates).
 3. Open a parent work item (User Story / PBI / Bug) and choose "Create Child Tasks" from the toolbar — child work items will be created from matching templates.
 
 ## How-To Guide
 
 ### Defining Task Templates
-Create Task templates via Project Settings → Boards → Team Configuration → Templates. 
+Create work item Templates via Project Settings → Boards → Team Configuration → Templates. 
 
 ![ADO Project Team Templates](img/create-child-tasks-screenshot-manage-templates.png)
 
@@ -54,6 +54,8 @@ Put a single-line JSON object containing an "applywhen" array into the template 
   ]
 }
 ```
+The above JSON filter rule will match any parent work item when: (WorkItemType = "Product Backlog Item") AND (State = "New" OR "Approved") AND (BoardColumn = "Developmen")...
+
 See the [Examples](#examples) section below for a more extensive set of filter examples.
 
 #### Supported Fields
@@ -70,9 +72,9 @@ Currently supported filter fields (in template Description JSON):
 
 Notes:
 - Multiple applywhen entries = OR (any entry matching will apply the template).
-- Arrays = OR across values for that field.
-- Title supports wildcards (*) and is case-insensitive.
+- Arrays = OR across values for that field (with the exception of Tags).
 - Tags as an array means all listed tags must be present (AND). For tag OR, add separate applywhen entries.
+- Title supports wildcards (*) and is case-insensitive.
 - AreaPath/IterationPath must match full path strings (case-insensitive). Escape backslashes in JSON (\\\\).
 - Special token values in templates are supported: @me (AssignedTo), @currentiteration (IterationPath).
 - The following child work item field values will be automatically inheritied from the parent work item if not explicitly defined in the Child Work Item Template: Title, AreaPath, IterationPath.
@@ -97,7 +99,7 @@ The child work items will be created in the same alphabetical order of the Templ
 
 ### Wildcards for Title
 
-You might want to apply a child work items to a parent work item if the parent work item title matches exactly or only partially. It's possible to match the parent work item title by using a wildcard filter rule and using the asterick character ("*").
+You might want to apply child work items to a parent work item if the parent work item title matches exactly or only partially. It's possible to match the parent work item title by using a wildcard filter rule which uses the asterick character ("*").
 
 ```json
 {
@@ -205,6 +207,9 @@ Multiple rules (AND across rules, OR within rules)
 
 ## FAQ
 
+- Q: What child work item types are supported?  
+  - A: The extension supports creating *any* child work item type, not just Tasks. The available child types depend on how your process is configured in Azure DevOps Organization Process settings (Project Settings → Boards → Process → Backlog Levels). For example, you can use this extension to create Bugs, Features, or custom types as children, as long as they are defined as valid child types in your process/backlog configuration.
+  
 - Q: How do I match templates for multiple states or types?
   - A: Use arrays in the JSON for that field (e.g., "System.State":["Approved","Committed"]).
 
@@ -221,10 +226,7 @@ Multiple rules (AND across rules, OR within rules)
   - A: No. Azure DevOps Services installs extensions at the organization level (Azure DevOps Server: collection level). They become available to all projects in that scope. To restrict usage you’d need to control permissions or uninstall/disable the extension at the org level.
 
 - Q: Why is the child work item title the same as the parent work item? How do I specify the title?
-  - A: If the Task template does not define System.Title the extension copies the parent’s title. To set a custom title, add the System.Title field to the Task template with the desired text.
-
-- Q: What child work item types are supported?  
-  - A: The extension supports creating *any* child work item type, not just Tasks. The available child types depend on how your process is configured in Azure DevOps Organization Process settings (Project Settings → Boards → Process → Backlog Levels). For example, you can use this extension to create Bugs, Features, or custom types as children, as long as they are defined as valid child types in your process/backlog configuration.
+  - A: If the Task template does not define System.Title then the extension copies the parent’s title. To set a custom title, add the System.Title field to the Task template with the desired text.
 
 ---
 
