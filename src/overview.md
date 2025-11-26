@@ -185,44 +185,45 @@ Multiple rules (AND across rules, OR within rules)
   - Verify templates exist for the project team (Project Settings → Boards → Team Configuration → Templates). Templates are defined and scoped per team and will only apply to work items for that specific team — they do not apply to other teams even if the user creating the child work items belongs to those teams. If you need the same templates elsewhere, create or copy them for each team (or switch the active team in the web UI to manage that team's templates).
   - Verify the supported work item types configured for the Project in the Azure DevOps Organization Process settings (Project Settings → Boards → Process → Backlog Levels).
 
-- Work Items not created / permission errors:
+- Work Items not created:
+  - Confirm filter rules match indended target parent work item field values.
+  - Check for malformed JSON in template description. Ensure your JSON is valid. Common issues include trailing commas, missing brackets, or improper escaping of backslashes. Use a JSON validator if unsure.
   - Confirm you have permission to create work items in the target project.
   - Check browser console logs for error messages from the extension.
 
 - Tags filter not matching:
   - Template tag filters require all listed tags (AND). Use multiple applywhen entries for OR.
-  - Check for malformed JSON in template description. Ensure your JSON is valid. Common issues include trailing commas, missing brackets, or improper escaping of backslashes. Use a JSON validator if unsure.
 
 - Iteration/Area not matching:
   - Use exact full path strings; escape backslashes in JSON (e.g., "Project\\\\Iteration\\\\Sprint 1").
 
-- Child work item title is not set as expected:
-  - The child work item title is determined by the System.Title field in the template. If System.Title is not specified in the template, the extension will copy the parent work item's title to the child. The Template Name is not used as the child work item title.
+- Child work item title is same as parent work item:
+  - The child work item title is determined by specifying the System.Title field in the template. If System.Title is not specified in the template, the extension will copy the parent work item's title to the child. The Template Name is not used as the child work item title.
 
 ---
 
 ## FAQ
 
-Q: How do I match templates for multiple states or types?
-A: Use arrays in the JSON for that field (e.g., "System.State":["Approved","Committed"]).
+- Q: How do I match templates for multiple states or types?
+  - A: Use arrays in the JSON for that field (e.g., "System.State":["Approved","Committed"]).
 
-Q: Can I use wildcards on Area/Iteration?
-A: No — AreaPath and IterationPath require exact full paths (case-insensitive).
+- Q: Can I use wildcards on Area/Iteration?
+  - A: No — AreaPath and IterationPath require exact full paths (case-insensitive).
 
-Q: How do I make tags match either A or B?
-A: Add multiple applywhen entries, one per tag, to produce an OR effect.
+- Q: How do I make tags match either A or B?
+  - A: Add multiple applywhen entries, one per tag, to produce an OR effect.
 
-Q: How are AssignedTo and Iteration special tokens handled?
-A: Use @me in a template field to assign to the current user; use @currentiteration to use the team's current iteration (handled at creation time).
+- Q: How are AssignedTo and Iteration special tokens handled?
+  - A: Use @me in a template field to assign to the current user; use @currentiteration to use the team's current iteration (handled at creation time).
 
-Q: Can I enable the extension for only some projects?
-A: No. Azure DevOps Services installs extensions at the organization level (Azure DevOps Server: collection level). They become available to all projects in that scope. To restrict usage you’d need to control permissions or uninstall/disable the extension at the org level.
+- Q: Can I enable the extension for only some projects?
+  - A: No. Azure DevOps Services installs extensions at the organization level (Azure DevOps Server: collection level). They become available to all projects in that scope. To restrict usage you’d need to control permissions or uninstall/disable the extension at the org level.
 
-Q: Why is the child work item title the same as the parent work item? How do I specify the title?
-A: If the Task template does not define System.Title the extension copies the parent’s title. To set a custom title, add the System.Title field to the Task template with the desired text.
+- Q: Why is the child work item title the same as the parent work item? How do I specify the title?
+  - A: If the Task template does not define System.Title the extension copies the parent’s title. To set a custom title, add the System.Title field to the Task template with the desired text.
 
-Q: What child work item types are supported?  
-A: The extension supports creating *any* child work item type, not just Tasks. The available child types depend on how your process is configured in Azure DevOps Organization Process settings (Project Settings → Boards → Process → Backlog Levels). For example, you can use this extension to create Bugs, Features, or custom types as children, as long as they are defined as valid child types in your process/backlog configuration.
+- Q: What child work item types are supported?  
+  - A: The extension supports creating *any* child work item type, not just Tasks. The available child types depend on how your process is configured in Azure DevOps Organization Process settings (Project Settings → Boards → Process → Backlog Levels). For example, you can use this extension to create Bugs, Features, or custom types as children, as long as they are defined as valid child types in your process/backlog configuration.
 
 ---
 
