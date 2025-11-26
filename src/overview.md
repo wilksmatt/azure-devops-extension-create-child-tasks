@@ -75,6 +75,7 @@ Notes:
 - Tags as an array means all listed tags must be present (AND). For tag OR, add separate applywhen entries.
 - AreaPath/IterationPath must match full path strings (case-insensitive). Escape backslashes in JSON (\\\\).
 - Special token values in templates are supported: @me (AssignedTo), @currentiteration (IterationPath).
+- The following child work item field values will be automatically inheritied from the parent work item if not explicitly defined in the Child Work Item Template: Title, AreaPath, IterationPath.
 
 ### Applying Child Work Items
 - Open a parent work item.
