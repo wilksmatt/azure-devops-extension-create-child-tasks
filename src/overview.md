@@ -1,194 +1,235 @@
-## Create Child Tasks ##
+# Create Child Tasks
 
-Azure DevOps offers team-specific work item templating as <a href="https://docs.microsoft.com/en-us/azure/devops/boards/backlogs/work-item-template?view=azure-devops&tabs=browser" target="_blank">core functionality</a> with which you can quickly apply pre-populated values for your team's commonly used fields per work item type. **Create Child Tasks** is an *extension* to Azure DevOps, which allows you to create multiple Task work items as children with a single click. Each Task work item is based on a single pre-defined Task template.
+Quick links: [Overview](#overview) • [Quick Start](#quick-start) • [How-To](#how-to-guide) • [Examples](#examples) • [Troubleshooting](#troubleshooting) • [FAQ](#faq) • [Credits](#credits)
 
-The child Task work items created by this extension are based on the hierarchy of work item types defined in the process template (<a href="https://docs.microsoft.com/en-us/azure/devops/boards/work-items/guidance/agile-process-workflow?view=azure-devops" target="_blank">Agile</a>, <a href="https://docs.microsoft.com/en-us/azure/devops/boards/work-items/guidance/scrum-process-workflow?view=azure-devops" target="_blank">Scrum</a>, <a href="https://docs.microsoft.com/en-us/azure/devops/boards/work-items/guidance/cmmi-process-workflow?view=azure-devops" target="_blank">CMMI</a>). For example, if you're using a process inherited from the agile template with a custom requirement-level type called defect and 3 Task templates defined, using this extension on a User Story or Defect work item will generate three child Tasks; one for each defined template.
+## Overview
 
-## How-To Guide ##
+Tired of manually creating the same set of child work items for each parent work item — what if you could generate them instantly with one click?
 
-### Defining Task Templates ###
+Create Child Tasks adds a toolbar action to Azure DevOps work items that instantly creates multiple child tasks (or any other child work item types) from a parent work item using team-defined Templates. Templates are matched by simple rules or JSON filters (type, state, title wildcards, tags, area/iteration, etc.), and the corresponding child work items are automatically created.
 
-Azure DevOps offers team-specific work item templating as core functionality with which you can quickly apply pre-populated values for your team's commonly used fields per work item type. View Microsoft's documentation about <a href="https://docs.microsoft.com/en-us/azure/devops/boards/backlogs/work-item-template" target="_blank">how to add and update work item templates</a>.
+## Quick Start
 
-![Export](img/create-child-tasks-screenshot-manage-templates.png)
+1. Install the extension at your Azure DevOps organization (org-level install; once installed it is available to all projects in that organization / collection).
+2. Define one or more Templates for your team (Project Settings → Boards → Team Configuration → Templates).
+3. Open a parent work item (User Story / PBI / Bug) and choose "Create Child Tasks" from the toolbar — child work items will be created from matching templates.
 
-### Creating Task Template Filter Rules ###
+## How-To Guide
 
-With this extension, it's possible to specify which parent work items apply to each Task template by putting rules into the Task template *Description* field. There are two ways that you can specify these rules:
+### Defining Task Templates
+Create work item Templates via Project Settings → Boards → Team Configuration → Templates. 
 
-![Export](img/create-child-tasks-screenshot-manage-templates-filter-rules.png)
+![ADO Project Team Templates](img/create-child-tasks-screenshot-manage-templates.png)
 
-#### Basic ####
+The template's Description is used for filtering rules. Two formats are supported:
 
-Put the list of applicable parent work item types in the child Task template's description field, like this:
+- [Basic Filter](#basic-filter-simple): Square-bracket list of parent work item types. Example: [Product Backlog Item, Bug]
+- [Advanced Filter](#advanced-filter-json): Single-line minified JSON with an applywhen array (see below)
 
-```[Product Backlog Item, Bug]```
+![Team Templates - Description Field - Filter Rules](img/create-child-tasks-screenshot-manage-templates-filter-rules.png)
 
-#### Advanced ####
+### Basic Filter (Simple)
+Place a bracketed list of parent types in the template Description. This will apply the template for those parent types.
+```
+[Product Backlog Item, Bug]
+```
 
-Put a minified (single line) JSON string into the child Task template's description field. Supported fields and behaviors:
+### Advanced Filter (JSON)
+Put a single-line JSON object containing an "applywhen" array into the template Description. Each entry in applywhen is evaluated as OR; fields inside an entry are combined as AND.
 
-- System.WorkItemType: Single value or array (OR). Case-insensitive exact match.
-- System.State: Single value or array (OR). Case-insensitive exact match.
-- System.BoardColumn: Single value or array (OR). Case-insensitive exact match.
-- System.BoardLane: Single value or array (OR). Case-insensitive exact match.
-- System.Title: Wildcard string (e.g., "*API*"). To match multiple patterns, use multiple rule objects in `applywhen` (OR across rules).
-- System.Tags: Single value or array. Arrays require all tags to be present (AND). For tag OR, use multiple rule objects in `applywhen`.
-- System.AreaPath: Single value or array (OR). Exact path match (case-insensitive), no wildcards. Remember to escape backslashes in JSON.
-- System.IterationPath: Single value or array (OR). Exact path match (case-insensitive), no wildcards. Remember to escape backslashes in JSON.
+#### Example
+```json
+{
+  "applywhen": [
+    {
+      "System.WorkItemType": "Product Backlog Item",
+      "System.State": [ "New", "Approved" ],
+      "System.BoardColumn": "Development",
+      "System.BoardLane": "Expedite",
+      "System.Title": "*Mobile*",
+      "System.Tags": [ "Tag1", "Tag2" ],
+      "System.AreaPath": "Project\\Area 1",
+      "System.IterationPath": "Project\\Iteration\\Sprint 1"
+    }
+  ]
+}
+```
+The above JSON filter rule will match any parent work item when: (WorkItemType = "Product Backlog Item") AND (State = "New" OR "Approved") AND (BoardColumn = "Developmen")...
 
-Example with all supported fields and OR logic:
+See the [Examples](#examples) section below for a more extensive set of filter examples.
+
+#### Supported Fields
+
+Currently supported filter fields (in template Description JSON):
+- System.WorkItemType
+- System.State
+- System.BoardColumn
+- System.BoardLane
+- System.Title
+- System.Tags
+- System.AreaPath
+- System.IterationPath
+
+Notes:
+- Multiple applywhen entries = OR (any entry matching will apply the template).
+- Arrays = OR across values for that field (with the exception of Tags).
+- Tags as an array means all listed tags must be present (AND). For tag OR, add separate applywhen entries.
+- Title supports wildcards (*) and is case-insensitive.
+- AreaPath/IterationPath must match full path strings (case-insensitive). Escape backslashes in JSON (\\\\).
+- Special token values in templates are supported: @me (AssignedTo), @currentiteration (IterationPath).
+- The following child work item field values will be automatically inheritied from the parent work item if not explicitly defined in the Child Work Item Template: Title, AreaPath, IterationPath.
+
+### Applying Child Work Items
+- Open a parent work item.
+- Select "Create Child Tasks" from the toolbar.
+- The extension finds matching Work Item Templates and creates them as child work items.
+
+![Create Child Work Items](img/create-child-tasks-screenshot-work-item-menu-item.png)
+
+![Create Child Work Items - Results](img/create-child-tasks-screenshot-work-item-tasks.png)
+
+### Ordering
+By default, child work items are created in alphabetical order based on the Template *Name*. To control the creation order, prefix template names with numbers (for example, 01-, 02-).
+
+![Work Item Templates Order - Prefix Template Names with Numbers](img/create-child-tasks-screenshot-manage-templates-order.png)
+
+The child work items will be created in the same alphabetical order of the Template Name fields. Keep in mind, that the title of the child work item is derived by specifiying the System.Title field in the work item template – it is *not* derived from the Template Name.
+
+![Work Item Templates Order - Results](img/create-child-tasks-screenshot-board-work-item-tasks.png)
+
+### Wildcards for Title
+
+You might want to apply child work items to a parent work item if the parent work item title matches exactly or only partially. It's possible to match the parent work item title by using a wildcard filter rule which uses the asterick character ("*").
 
 ```json
 {
     "applywhen": [
-        {
-            "System.WorkItemType": ["Product Backlog Item", "Bug"],
-            "System.State": ["Approved", "Committed"],
-            "System.BoardColumn": ["Development", "Testing"],
-            "System.BoardLane": ["Expedite", "Default"],
-            "System.Title": "*API*",
-            "System.Tags": ["Security", "Backend"],
-            "System.AreaPath": [
-                "Project\\Area Path\\Sub Path",
-                "Project\\Area Path"
-            ],
-            "System.IterationPath": [
-                "Project\\Iteration\\Sprint 1",
-                "Project\\Iteration\\Sprint 2"
-            ]
-        },
-        {
-            "System.WorkItemType": "User Story",
-            "System.Title": "*Integration*"
-        }
-    ]
+    {
+        "System.WorkItemType": "Product Backlog Item",
+        "System.Title": "*WildcardString*"
+    }]
 }
 ```
 
-### Applying Child Tasks ###
-
-Find and select the *Create Child Tasks* option on the toolbar menu of the parent work item (e.g., Product Backlog Item, User Story, Bug).
-
-![Export](img/create-child-tasks-screenshot-work-item-menu-item.png)
-
-You should now have children associated with the open work item.
-
-![Export](img/create-child-tasks-screenshot-work-item-tasks.png)
-
-### Ordering Child Tasks ###
-
-By default, the child Tasks are created and ordered alphabetically by the Task template name. If you want to customize the order, prefix template names with numbers.
-
-![Export](img/create-child-tasks-screenshot-manage-templates-order.png)
-
-When creating the tasks with the extension, the tasks will show up in the same order in the work item.
-
-![Export](img/create-child-tasks-screenshot-board-work-item-tasks.png)
-
-### Using 'Wildcards' for Title Filter Rules ###
-
-You can apply a child task if the parent work item title matches completely or partially. Use a wildcard string in the filter rule with the asterisk character ("*").
-
-```json
-{
-    "applywhen": [
-        {
-            "System.WorkItemType": "Product Backlog Item",
-            "System.Title": "*WildcardString*"
-        }
-    ]
-}
+The following are examples of how the wildcard matching can be used:
 ```
-
-Wildcard examples:
-
-```
+- "a*b"     Everything that starts with "a" and ends with "b"
 - "a*"      Everything that starts with "a"
 - "*b"      Everything that ends with "b"
-- "a*b"     Everything that starts with "a" and ends with "b"
 - "*a*"     Everything that has an "a" in it
 - "*a*b*"   Everything that has an "a" in it, followed by anything, followed by a "b", followed by anything
 ```
 
-### Using arrays for multiple values (OR) ###
+Note: Wildcard filter rules currently only work for the System.Title field.
 
-Most fields accept either a single value or an array of values. When you provide an array, any one value may match (logical OR). This is useful when the same template should apply to several states, types, or other field values.
+---
 
-Example (multiple allowed values):
+## Examples
 
-```json
-{
-    "applywhen": [
-        {
-            "System.WorkItemType": ["Product Backlog Item", "Bug"],
-            "System.State": ["Approved", "Committed", "In Progress"],
-            "System.IterationPath": [
-                "Project\\Iteration\\Sprint 1",
-                "Project\\Iteration\\Sprint 2"
-            ]
-        }
-    ]
-}
+Template Description basic example:
+```
+[User Story, Bug]
 ```
 
-Notes and exceptions:
-- System.Title: Use a single wildcard string (e.g., "*API*"). To match multiple title patterns, add multiple rule objects in `applywhen` (OR across rules).
-- System.Tags: Arrays here mean all listed tags must be present on the parent (logical AND). For example, ["Security", "Backend"] requires both tags. For tag OR, use separate rule objects in `applywhen` (rules are combined with OR):
-
-    ```json
+Minimal JSON example (applies to User Story titles containing "integration"):
+```json
+{
+  "applywhen": [
     {
-        "applywhen": [
-            { "System.WorkItemType": "User Story", "System.Tags": "Security" },
-            { "System.WorkItemType": "User Story", "System.Tags": "Backend" }
-        ]
+      "System.WorkItemType": "User Story",
+      "System.Title": "*integration*"
     }
-    ```
-
-### Filtering by AreaPath and IterationPath ###
-
-You can target templates to specific Area or Iteration Paths using the advanced JSON rules in a template's Description. The value must match the parent work item’s corresponding field (case-insensitive) and supports either a single value or an array of allowed values.
-
-- Example (single AreaPath and IterationPath):
-
-```json
-{
-    "applywhen": [
-        {
-            "System.WorkItemType": "Product Backlog Item",
-            "System.AreaPath": "Project\\Area Path\\Sub Path",
-            "System.IterationPath": "Project\\Iteration\\Sprint 1"
-        }
-    ]
+  ]
 }
 ```
 
-- Example (multiple AreaPaths and IterationPaths – any-of will match):
-
+Multiple rules (OR across rules, AND within rules):
 ```json
 {
-    "applywhen": [
-        {
-            "System.WorkItemType": "Product Backlog Item",
-            "System.AreaPath": [
-                "Project\\Area Path\\Sub Path",
-                "Project\\Area Path"
-            ],
-            "System.IterationPath": [
-                "Project\\Iteration\\Sprint 1",
-                "Project\\Iteration\\Sprint 2"
-            ]
-        }
-    ]
+  "applywhen": [
+    {
+      "System.WorkItemType": "User Story",
+      "System.State": "Approved"
+    },
+    {
+      "System.WorkItemType": "User Story",
+      "System.State": "Committed"
+    },
+    {
+      "System.WorkItemType": "Bug",
+      "System.Tags": ["Security"]
+    }
+  ]
 }
 ```
 
-Behavior notes:
-- Matching is case-insensitive, but paths must otherwise match exactly (no wildcards on AreaPath/IterationPath).
-- To include multiple sub-areas/iterations, list each full path explicitly in the array.
-- Tip: Copy the exact Area or Iteration Path from a work item or from Project Settings → Boards → Areas or Iterations.
-- Important: In JSON, backslash is an escape character. Azure DevOps Area and Iteration Paths use backslashes (\\) to denote hierarchy. To represent a literal backslash in JSON you must escape it as \\\\.
+Multiple rules (AND across rules, OR within rules)
+```json
+{
+  "applywhen": [
+    {
+      "System.WorkItemType": ["Product Backlog Item", "User Story"],
+      "System.State": ["New", "Approved", "Committed"],
+      "System.BoardColumn": ["Backlog", "Ready"],
+      "System.BoardLane": ["Default", "Expedite"],
+      "System.Tags": ["Overdue", "Urgent"],
+      "System.AreaPath": ["Project\\Area 1", "Project\\Area 2"],
+      "System.IterationPath": ["Project\\Iteration\\Sprint 1", "Project\\Iteration\\Sprint 2"]
+    }
+  ]
+}
+```
 
-## Credits ##
+---
 
-Cloned from https://github.com/figueiredorui/1-click-child-links
+## Troubleshooting
+
+- No templates found:
+  - Verify templates exist for the project team (Project Settings → Boards → Team Configuration → Templates). Templates are defined and scoped per team and will only apply to work items for that specific team — they do not apply to other teams even if the user creating the child work items belongs to those teams. If you need the same templates elsewhere, create or copy them for each team (or switch the active team in the web UI to manage that team's templates).
+  - Verify the supported work item types configured for the Project in the Azure DevOps Organization Process settings (Project Settings → Boards → Process → Backlog Levels).
+
+- Work Items not created:
+  - Confirm filter rules match indended target parent work item field values.
+  - Check for malformed JSON in template description. Ensure your JSON is valid. Common issues include trailing commas, missing brackets, or improper escaping of backslashes. Use a JSON validator if unsure.
+  - Confirm you have permission to create work items in the target project.
+  - Check browser console logs for error messages from the extension.
+
+- Tags filter not matching:
+  - Template tag filters require all listed tags (AND). Use multiple applywhen entries for OR.
+
+- Iteration/Area not matching:
+  - Use exact full path strings; escape backslashes in JSON (e.g., "Project\\\\Iteration\\\\Sprint 1").
+
+- Child work item title is same as parent work item:
+  - The child work item title is determined by specifying the System.Title field in the template. If System.Title is not specified in the template, the extension will copy the parent work item's title to the child. The Template Name is not used as the child work item title.
+
+---
+
+## FAQ
+
+- Q: What child work item types are supported?  
+  - A: The extension supports creating *any* child work item type, not just Tasks. The available child types depend on how your process is configured in Azure DevOps Organization Process settings (Project Settings → Boards → Process → Backlog Levels). For example, you can use this extension to create Bugs, Features, or custom types as children, as long as they are defined as valid child types in your process/backlog configuration.
+  
+- Q: How do I match templates for multiple states or types?
+  - A: Use arrays in the JSON for that field (e.g., "System.State":["Approved","Committed"]).
+
+- Q: Can I use wildcards on Area/Iteration?
+  - A: No — AreaPath and IterationPath require exact full paths (case-insensitive).
+
+- Q: How do I make tags match either A or B?
+  - A: Add multiple applywhen entries, one per tag, to produce an OR effect.
+
+- Q: How are AssignedTo and Iteration special tokens handled?
+  - A: Use @me in a template field to assign to the current user; use @currentiteration to use the team's current iteration (handled at creation time).
+
+- Q: Can I enable the extension for only some projects?
+  - A: No. Azure DevOps Services installs extensions at the organization level (Azure DevOps Server: collection level). They become available to all projects in that scope. To restrict usage you’d need to control permissions or uninstall/disable the extension at the org level.
+
+- Q: Why is the child work item title the same as the parent work item? How do I specify the title?
+  - A: If the Task template does not define System.Title then the extension copies the parent’s title. To set a custom title, add the System.Title field to the Task template with the desired text.
+
+---
+
+## Credits
+
+Originally cloned from https://github.com/figueiredorui/1-click-child-links
