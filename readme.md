@@ -6,7 +6,7 @@ The child Task work items created by this extension are based on the hierarchy o
 
 ## End User Guide ##
 
-See the full feature walkthrough, configuration tips, and examples in the extension overview: [Extension Overview](./overview.md).
+See the full feature walkthrough, configuration tips, and examples in the extension overview: [Extension Overview](./src/overview.md).
 
 ## Developer Guide ##
 
