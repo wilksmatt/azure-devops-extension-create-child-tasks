@@ -121,8 +121,15 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             // If template has no IterationPath field copies value from parent, check if IterationPath field value is @currentiteration
             if (taskTemplate.fields['System.IterationPath'] == null){
                 workItem.push({ "op": "add", "path": "/fields/System.IterationPath", "value": currentWorkItem['System.IterationPath'] })
-            }else if (taskTemplate.fields['System.IterationPath'].toLowerCase() == '@currentiteration'){
-                workItem.push({ "op": "add", "path": "/fields/System.IterationPath", "value": teamSettings.backlogIteration.name + teamSettings.defaultIteration.path })
+            } else if (taskTemplate.fields['System.IterationPath'].toLowerCase() == '@currentiteration') {
+                // Check that teamSettings.defaultIteration is not null and has a path
+                if (teamSettings && teamSettings.defaultIteration && teamSettings.defaultIteration.path) {
+                    WriteLog('Info: Creating work item with team default iteration path.');
+                    workItem.push({ "op": "add", "path": "/fields/System.IterationPath", "value": teamSettings.backlogIteration.name + teamSettings.defaultIteration.path })
+                } else {
+                    WriteLog('Warning: No default or current iteration path defined in team settings. Falling back to parent iteration path.');
+                    workItem.push({ "op": "add", "path": "/fields/System.IterationPath", "value": currentWorkItem['System.IterationPath'] })
+                }
             }
 
             // Check if AssignedTo field value is @me
