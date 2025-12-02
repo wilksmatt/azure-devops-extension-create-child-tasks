@@ -18,6 +18,7 @@ Create Child Tasks adds a toolbar action to Azure DevOps work items that instant
 - Supports special tokens: `@me` for AssignedTo, `@currentiteration` for IterationPath.
 - Works with any child work item type (Tasks, Bugs, Features, custom types).
 - Child items are created in alphabetical order by template name (can be controlled with prefixes).
+- Well supported with comprehensive documentation and practical examples.
 
 ## Quick Start
 
