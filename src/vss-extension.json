@@ -3,12 +3,15 @@
     "id": "create-child-tasks-public",
     "version": "0.4.14",
     "name": "Create Child Tasks",
-    "description": "Add pre-defined task templates to a work item with a single click.",
+    "description": "Create multiple child work items from pre-defined templates with a single click.",
     "public": true,
     "publisher": "wilksmatt",
     "repository": {
         "type": "git",
         "uri": "https://github.com/wilksmatt/azure-devops-extension-create-child-tasks"
+    },
+    "CustomerQnASupport": {
+        "enablemarketplaceqna": "true"
     },
     "icons": {
         "default": "img/create-child-tasks-logo-128x128.png"
@@ -34,7 +37,16 @@
         }
     ],
     "tags": [
-        "Tasks"
+        "Tasks",
+        "Child Tasks",
+        "Work Items",
+        "Templates",
+        "Links",
+        "Automation",
+        "Bulk Actions",
+        "Boards",
+        "Planning",
+        "Productivity"
     ],
     "categories": [
         "Azure Boards"
@@ -75,7 +87,7 @@
         {
             "id": "create-child-task-work-item-button",
             "type": "ms.vss-web.action",
-            "description": "Create Child Tasks",
+            "description": "Adds a menu item to the work item toolbar to create child tasks.",
             "targets": [
                 "ms.vss-work-web.work-item-toolbar-menu"
             ],
