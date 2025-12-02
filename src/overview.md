@@ -13,11 +13,11 @@ Create Child Tasks adds a toolbar action to Azure DevOps work items that instant
 - Uses team-defined Templates for flexible, reusable child definitions.
 - Supports both simple (bracketed) and advanced (JSON) template filters.
 - Filters by parent type, state, title (with wildcards), tags, area, and iteration.
+- Supports AND/OR logic in filter rules.
 - Automatically copies fields (Title, AreaPath, IterationPath) from parent if not specified.
 - Supports special tokens: `@me` for AssignedTo, `@currentiteration` for IterationPath.
 - Works with any child work item type (Tasks, Bugs, Features, custom types).
 - Child items are created in alphabetical order by template name (can be controlled with prefixes).
-- Fully integrated into Azure DevOps Boards UI.
 
 ## Quick Start
 
