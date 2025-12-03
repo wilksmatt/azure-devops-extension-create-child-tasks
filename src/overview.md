@@ -1,6 +1,6 @@
 # Create Child Tasks
 
-Quick links: [Overview](#overview) • [Quick Start](#quick-start) • [How-To](#how-to-guide) • [Examples](#examples) • [Troubleshooting](#troubleshooting) • [FAQ](#faq) • [Credits](#credits)
+Quick links: [Overview](#overview) • [Quick Start](#quick-start) • [How-To](#how-to-guide) • [Examples](#examples) • [Troubleshooting](#troubleshooting) • [FAQ](#faq) • [Changelog](#changelog) • [Credits](#credits)
 
 ## Overview
 
@@ -242,6 +242,34 @@ Multiple rules (AND across rules, OR within rules)
 
 ---
 
+## Changelog
+
+All notable changes to Create Child Tasks. Dates in YYYY-MM-DD.
+
+### 1.0.0 — 2025-12-02
+- Fixed: Broken Tag filtering
+- Fixed: Resolved "Error saving [object Object]" error message when creating child work items
+- Fixed: Invalid/malformed template JSON failing remaining template matching (possibly causing not all matching child work items to be created).
+- Fixed: Graceful handling use of @currentiteration when no default iterations are setup for respective Project Team
+- Added: IterationPath filtering
+- Added: Release Notes / Changelog
+- Changed: Improved end user documentation: Overview, Key Features, How-To, Examples, Troubleshooting, FAQs
+- Changed: Improved browser console logging
+- Changed: Marketplace lising updates: Description, Tags, enabling Q&A tab
+
+### 0.3.x — 2020
+- Added: Wildcard filtering on Title
+- Changed: Removed "Create Child Tasks" button from backlog and board menu views to prevent child work items not being created reliably.
+
+
+### 0.1.x — 2019
+- Original fork from https://github.com/figueiredorui/1-click-child-links
+- Added: Area Path Filtering
+- Added: Dark theme support
+- Added: Improved documentation and screenshots
+- Changed: Logo and icons
+
+---
 ## Credits
 
 Originally cloned from https://github.com/figueiredorui/1-click-child-links
