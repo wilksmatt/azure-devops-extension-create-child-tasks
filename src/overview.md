@@ -10,7 +10,9 @@ Tired of manually creating the same set of child work items for each parent work
 
 Create Child Tasks adds a toolbar action to Azure DevOps work items that instantly creates multiple child tasks (or any other child work item types) from a parent work item using team-defined Templates. Templates are matched by simple rules or JSON filters (type, state, title wildcards, tags, area/iteration, etc.), and the corresponding child work items are automatically created.
 
-> Note: This extension builds on and enhances the original [1‑Click Child‑Links extension](https://marketplace.visualstudio.com/items?itemName=ruifig.vsts-work-item-one-click-child-links). The original is excellent but has known issues and has not been updated since 2020. This project adds fixes, improved filtering, better error handling, expanded documentation, and active support.
+> **Note:** This extension builds on and enhances the original [1‑Click Child‑Links extension](https://marketplace.visualstudio.com/items?itemName=ruifig.vsts-work-item-one-click-child-links). The original is excellent but has known issues and has not been updated since 2020. This project adds fixes, improved filtering, better error handling, expanded documentation, and active support.
+
+![Create Child Work Items](img/create-child-tasks-screenshot-work-item-menu-item.png)
 
 **Key Features:**
 
@@ -24,8 +26,6 @@ Create Child Tasks adds a toolbar action to Azure DevOps work items that instant
 - Works with any child work item type (Tasks, Bugs, Features, custom types).
 - Child items are created in alphabetical order by template name (can be controlled with prefixes).
 - Well supported with comprehensive documentation and practical examples.
-
-![Create Child Work Items](img/create-child-tasks-screenshot-work-item-menu-item.png)
 
 ## Quick Start
 
