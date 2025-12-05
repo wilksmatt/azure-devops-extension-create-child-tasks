@@ -10,7 +10,7 @@ Tired of manually creating the same set of child work items for each parent work
 
 Create Child Tasks adds a toolbar action to Azure DevOps work items that instantly creates multiple child tasks (or any other child work item types) from a parent work item using team-defined Templates. Templates are matched by simple rules or JSON filters (type, state, title wildcards, tags, area/iteration, etc.), and the corresponding child work items are automatically created.
 
-> **Note:** This extension builds on and enhances the original [1‑Click Child‑Links extension](https://marketplace.visualstudio.com/items?itemName=ruifig.vsts-work-item-one-click-child-links). The original is excellent but has known issues and has not been updated since 2020. This project adds fixes, improved filtering, better error handling, expanded documentation, and active support.
+> **Note:** This extension builds on and enhances the original [1‑Click Child‑Links extension](https://marketplace.visualstudio.com/items?itemName=ruifig.vsts-work-item-one-click-child-links). The original has great core functionality but has not been updated since 2020 and has some known issues. This extension provides fixes, improved filtering, better error handling, expanded documentation, and active support.
 
 ![Create Child Work Items](img/create-child-tasks-screenshot-work-item-menu-item.png)
 
@@ -19,7 +19,7 @@ Create Child Tasks adds a toolbar action to Azure DevOps work items that instant
 - One-click creation of multiple child work items from a parent.
 - Uses team-defined Templates for flexible, reusable child definitions.
 - Supports both simple (bracketed) and advanced (JSON) template filters.
-- Filters by parent type, state, title (with wildcards), tags, area, and iteration.
+- Filters by parent type, state, title (with wildcards), tags, area, iteration, board column, or board lane.
 - Supports AND/OR logic in filter rules.
 - Automatically copies fields (Title, AreaPath, IterationPath) from parent if not specified.
 - Supports special tokens: `@me` for AssignedTo, `@currentiteration` for IterationPath.
