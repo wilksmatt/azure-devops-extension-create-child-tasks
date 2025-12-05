@@ -1,12 +1,16 @@
 # Create Child Tasks
 
-Quick links: [Overview](#overview) • [Quick Start](#quick-start) • [How-To](#how-to-guide) • [Examples](#examples) • [Troubleshooting](#troubleshooting) • [FAQ](#faq) • [Changelog](#changelog) • [Credits](#credits)
+**Quick links:**
+
+[Overview](#overview) • [Quick Start](#quick-start) • [How-To](#how-to-guide) • [Examples](#examples) • [Troubleshooting](#troubleshooting) • [FAQ](#faq) • [Changelog](#changelog) • [Credits](#credits)
 
 ## Overview
 
 Tired of manually creating the same set of child work items for each parent work item — what if you could generate them instantly with one click?
 
 Create Child Tasks adds a toolbar action to Azure DevOps work items that instantly creates multiple child tasks (or any other child work item types) from a parent work item using team-defined Templates. Templates are matched by simple rules or JSON filters (type, state, title wildcards, tags, area/iteration, etc.), and the corresponding child work items are automatically created.
+
+> Note: This extension builds on and enhances the original 1‑Click Child‑Links extension (https://marketplace.visualstudio.com/items?itemName=ruifig.vsts-work-item-one-click-child-links). The original is excellent but has known issues and has not been updated since 2020. This project adds fixes, improved filtering, better error handling, expanded documentation, and active support.
 
 **Key Features:**
 
@@ -21,11 +25,13 @@ Create Child Tasks adds a toolbar action to Azure DevOps work items that instant
 - Child items are created in alphabetical order by template name (can be controlled with prefixes).
 - Well supported with comprehensive documentation and practical examples.
 
+![Create Child Work Items](img/create-child-tasks-screenshot-work-item-menu-item.png)
+
 ## Quick Start
 
 1. Install the extension at your Azure DevOps organization (org-level install; once installed it is available to all projects in that organization / collection).
-2. Define one or more Templates for your team (Project Settings → Boards → Team Configuration → Templates).
-3. Open a parent work item (User Story / PBI / Bug) and choose "Create Child Tasks" from the toolbar — child work items will be created from matching templates.
+2. [Define one or more Templates](#defining-task-templates) for your team (Project Settings → Boards → Team Configuration → Templates).
+3. Open a parent work item (User Story / PBI / Bug) and [choose "Create Child Tasks" from the toolbar](#applying-child-work-items) — child work items will be created from matching templates.
 
 ## How-To Guide
 
