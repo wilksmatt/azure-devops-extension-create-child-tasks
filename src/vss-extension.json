@@ -1,7 +1,7 @@
 {
     "manifestVersion": 1.0,
     "id": "create-child-tasks-public",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "name": "Create Child Tasks",
     "description": "Create multiple child work items from pre-defined templates with a single click.",
     "public": true,
@@ -43,7 +43,6 @@
         "Templates",
         "Links",
         "Automation",
-        "Bulk Actions",
         "Boards",
         "Planning",
         "Productivity"
