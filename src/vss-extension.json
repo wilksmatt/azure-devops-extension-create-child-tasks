@@ -1,15 +1,11 @@
 {
     "manifestVersion": 1.0,
     "id": "create-child-tasks-public",
-    "version": "1.0.1",
+    "version": "1.0.4",
     "name": "Create Child Tasks",
     "description": "Create multiple child work items from pre-defined templates with a single click.",
     "public": true,
     "publisher": "wilksmatt",
-    "repository": {
-        "type": "git",
-        "uri": "https://github.com/wilksmatt/azure-devops-extension-create-child-tasks"
-    },
     "CustomerQnASupport": {
         "enablemarketplaceqna": "true"
     },

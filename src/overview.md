@@ -1,6 +1,8 @@
 # Create Child Tasks
 
-Quick links: [Overview](#overview) • [Quick Start](#quick-start) • [How-To](#how-to-guide) • [Examples](#examples) • [Troubleshooting](#troubleshooting) • [FAQ](#faq) • [Changelog](#changelog) • [Credits](#credits)
+**Quick links:**
+
+[Overview](#overview) • [Quick Start](#quick-start) • [How-To](#how-to-guide) • [Examples](#examples) • [Troubleshooting](#troubleshooting) • [FAQ](#faq) • [Changelog](#changelog) • [Credits](#credits)
 
 ## Overview
 
@@ -8,11 +10,16 @@ Tired of manually creating the same set of child work items for each parent work
 
 Create Child Tasks adds a toolbar action to Azure DevOps work items that instantly creates multiple child tasks (or any other child work item types) from a parent work item using team-defined Templates. Templates are matched by simple rules or JSON filters (type, state, title wildcards, tags, area/iteration, etc.), and the corresponding child work items are automatically created.
 
+> **Note:** This extension builds on and enhances the original [1‑Click Child‑Links extension](https://marketplace.visualstudio.com/items?itemName=ruifig.vsts-work-item-one-click-child-links). The original has great core functionality but has not been updated since 2020 and has some known issues. This extension provides fixes, improved filtering, better error handling, expanded documentation, and active support.
+
+![Create Child Work Items](img/create-child-tasks-screenshot-work-item-menu-item.png)
+
 **Key Features:**
+
 - One-click creation of multiple child work items from a parent.
 - Uses team-defined Templates for flexible, reusable child definitions.
 - Supports both simple (bracketed) and advanced (JSON) template filters.
-- Filters by parent type, state, title (with wildcards), tags, area, and iteration.
+- Filters by parent type, state, title (with wildcards), tags, area, iteration, board column, or board lane.
 - Supports AND/OR logic in filter rules.
 - Automatically copies fields (Title, AreaPath, IterationPath) from parent if not specified.
 - Supports special tokens: `@me` for AssignedTo, `@currentiteration` for IterationPath.
@@ -23,12 +30,13 @@ Create Child Tasks adds a toolbar action to Azure DevOps work items that instant
 ## Quick Start
 
 1. Install the extension at your Azure DevOps organization (org-level install; once installed it is available to all projects in that organization / collection).
-2. Define one or more Templates for your team (Project Settings → Boards → Team Configuration → Templates).
-3. Open a parent work item (User Story / PBI / Bug) and choose "Create Child Tasks" from the toolbar — child work items will be created from matching templates.
+2. [Define one or more Templates](#defining-task-templates) for your team (Project Settings → Boards → Team Configuration → Templates).
+3. Open a parent work item (User Story / PBI / Bug) and [choose "Create Child Tasks" from the toolbar](#applying-child-work-items) — child work items will be created from matching templates.
 
 ## How-To Guide
 
 ### Defining Task Templates
+
 Create work item Templates via Project Settings → Boards → Team Configuration → Templates. 
 
 ![ADO Project Team Templates](img/create-child-tasks-screenshot-manage-templates.png)
@@ -41,15 +49,18 @@ The template's Description is used for filtering rules. Two formats are supporte
 ![Team Templates - Description Field - Filter Rules](img/create-child-tasks-screenshot-manage-templates-filter-rules.png)
 
 ### Basic Filter (Simple)
+
 Place a bracketed list of parent types in the template Description. This will apply the template for those parent types.
 ```
 [Product Backlog Item, Bug]
 ```
 
 ### Advanced Filter (JSON)
+
 Put a single-line JSON object containing an "applywhen" array into the template Description. Each entry in applywhen is evaluated as OR; fields inside an entry are combined as AND.
 
 #### Example
+
 ```json
 {
   "applywhen": [
@@ -73,6 +84,7 @@ See the [Examples](#examples) section below for a more extensive set of filter e
 #### Supported Fields
 
 Currently supported filter fields (in template Description JSON):
+
 - System.WorkItemType
 - System.State
 - System.BoardColumn
@@ -83,6 +95,7 @@ Currently supported filter fields (in template Description JSON):
 - System.IterationPath
 
 Notes:
+
 - Multiple applywhen entries = OR (any entry matching will apply the template).
 - Arrays = OR across values for that field (with the exception of Tags).
 - Tags as an array means all listed tags must be present (AND). For tag OR, add separate applywhen entries.
@@ -92,6 +105,7 @@ Notes:
 - The following child work item field values will be automatically inheritied from the parent work item if not explicitly defined in the Child Work Item Template: Title, AreaPath, IterationPath.
 
 ### Applying Child Work Items
+
 - Open a parent work item.
 - Select "Create Child Tasks" from the toolbar.
 - The extension finds matching Work Item Templates and creates them as child work items.
@@ -101,6 +115,7 @@ Notes:
 ![Create Child Work Items - Results](img/create-child-tasks-screenshot-work-item-tasks.png)
 
 ### Ordering
+
 By default, child work items are created in alphabetical order based on the Template *Name*. To control the creation order, prefix template names with numbers (for example, 01-, 02-).
 
 ![Work Item Templates Order - Prefix Template Names with Numbers](img/create-child-tasks-screenshot-manage-templates-order.png)
@@ -124,6 +139,7 @@ You might want to apply child work items to a parent work item if the parent wor
 ```
 
 The following are examples of how the wildcard matching can be used:
+
 ```
 - "a*b"     Everything that starts with "a" and ends with "b"
 - "a*"      Everything that starts with "a"
@@ -144,6 +160,7 @@ Template Description basic example:
 ```
 
 Minimal JSON example (applies to User Story titles containing "integration"):
+
 ```json
 {
   "applywhen": [
@@ -156,6 +173,7 @@ Minimal JSON example (applies to User Story titles containing "integration"):
 ```
 
 Multiple rules (OR across rules, AND within rules):
+
 ```json
 {
   "applywhen": [
@@ -175,7 +193,8 @@ Multiple rules (OR across rules, AND within rules):
 }
 ```
 
-Multiple rules (AND across rules, OR within rules)
+Multiple rules (AND across rules, OR within rules):
+
 ```json
 {
   "applywhen": [
@@ -247,6 +266,7 @@ Multiple rules (AND across rules, OR within rules)
 All notable changes to Create Child Tasks. Dates in YYYY-MM-DD.
 
 ### 1.0.0 — 2025-12-02
+
 - Fixed: Broken Tag filtering
 - Fixed: Resolved "Error saving [object Object]" error message when creating child work items
 - Fixed: Invalid/malformed template JSON failing remaining template matching (possibly causing not all matching child work items to be created).
@@ -258,16 +278,18 @@ All notable changes to Create Child Tasks. Dates in YYYY-MM-DD.
 - Changed: Marketplace lising updates: Description, Tags, enabling Q&A tab
 
 ### 0.3.x — 2020
+
 - Added: Wildcard filtering on Title
 - Changed: Removed "Create Child Tasks" button from backlog and board menu views to prevent child work items not being created reliably.
 
 
 ### 0.1.x — 2019
-- Original fork from https://github.com/figueiredorui/1-click-child-links
-- Added: Area Path Filtering
-- Added: Dark theme support
-- Added: Improved documentation and screenshots
-- Changed: Logo and icons
+
+-   Original fork from https://github.com/figueiredorui/1-click-child-links
+-   Added: Area Path Filtering
+-   Added: Dark theme support
+-   Added: Improved documentation and screenshots
+-   Changed: Logo and icons
 
 ---
 ## Credits
