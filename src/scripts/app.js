@@ -459,7 +459,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                     firstClose = str.lastIndexOf('}');
                     if (firstClose <= firstOpen) {
                         if (attempts > 0) {
-                            WriteLog('extractJSON: failed to parse JSON' + contextMsg + ' after ' + attempts + ' attempts. Last error: ' + lastError);
+                            WriteLog('Failed to parse JSON' + contextMsg + ' after ' + attempts + ' attempts. Last error: ' + lastError);
                         }
                         return null;
                     }
@@ -479,7 +479,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                 } while (firstOpen != -1);
                 // Exhausted search without success
                 if (attempts > 0) {
-                    WriteLog('extractJSON: failed to parse JSON' + contextMsg + ' after ' + attempts + ' attempts. Last error: ' + lastError);
+                    WriteLog('Failed to parse JSON' + contextMsg + ' after ' + attempts + ' attempts. Last error: ' + lastError);
                 }
                 return null;
             } else {
