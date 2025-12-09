@@ -8,7 +8,7 @@
     grunt.initConfig({
         exec: {
             package_dev: {
-                command: "tfx extension create --rev-version --manifests vss-extension.json --overrides-file configs/dev.json --output-path ../dist",
+                command: "tfx extension create  --manifests vss-extension.json --overrides-file configs/dev.json --output-path ../dist",
                 stdout: true,
                 stderr: true
             },
