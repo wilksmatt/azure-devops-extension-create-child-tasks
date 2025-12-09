@@ -1,5 +1,6 @@
 {
   "id": "create-child-tasks-release-test",
+  "version": "1.0.4",
   "name": "Create Child Tasks (Release Test)",
   "public": false
 }
