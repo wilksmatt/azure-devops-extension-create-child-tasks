@@ -124,10 +124,10 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             } else if (taskTemplate.fields['System.IterationPath'].toLowerCase() == '@currentiteration') {
                 // Check that teamSettings.defaultIteration is not null and has a path
                 if (teamSettings && teamSettings.defaultIteration && teamSettings.defaultIteration.path) {
-                    WriteLog('Info: Creating work item with team default iteration path.');
+                    WriteLog('Info: Creating work item (template: ' + getTemplateName(taskTemplate) + ') with team default iteration path.');
                     workItem.push({ "op": "add", "path": "/fields/System.IterationPath", "value": teamSettings.backlogIteration.name + teamSettings.defaultIteration.path })
                 } else {
-                    WriteLog('Warning: No default or current iteration path defined in team settings. Falling back to parent iteration path.');
+                    WriteLog('Warning: No default or current iteration path defined in team settings for template ' + getTemplateName(taskTemplate) + '. Falling back to parent iteration path.');
                     workItem.push({ "op": "add", "path": "/fields/System.IterationPath", "value": currentWorkItem['System.IterationPath'] })
                 }
             }
@@ -186,9 +186,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                             });
                         }, function (err) {
                             var msg = (err && (err.message || err.statusText)) ? (err.message || err.statusText) : (typeof err === 'string' ? err : JSON.stringify(err));
-                            var tName = (taskTemplate && taskTemplate.name) ? ('"' + taskTemplate.name + '"') : 'unknown';
-                            var tId = (taskTemplate && taskTemplate.id) ? taskTemplate.id : 'n/a';
-                            WriteLog('Failed to add relation for template ' + tName + ' (id: ' + tId + '): ' + msg);
+                            WriteLog('Failed to add relation for template ' + getTemplateName(taskTemplate) + ': ' + msg);
                             // Re-throw to be handled by upstream catch
                             throw err;
                         });
@@ -311,7 +309,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             // Try to extract a JSON object from the template description
             var extracted = extractJSON(
                 taskTemplate.description,
-                'template "' + (taskTemplate && taskTemplate.name ? taskTemplate.name : 'unknown') + '" (id: ' + (taskTemplate && taskTemplate.id ? taskTemplate.id : 'n/a') + ')'
+                getTemplateName(taskTemplate)
             );
             var jsonFilters = extracted && extracted[0];
 
@@ -365,7 +363,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             try {
                 var extracted = extractJSON(
                     taskTemplate && taskTemplate.description ? taskTemplate.description : "",
-                    'template "' + (taskTemplate && taskTemplate.name ? taskTemplate.name : 'unknown') + '" (id: ' + (taskTemplate && taskTemplate.id ? taskTemplate.id : 'n/a') + ')'
+                    getTemplateName(taskTemplate)
                 );
                 var hasJson = extracted && extracted[0] && typeof extracted[0] === 'object';
                 return true; // JSON case handled elsewhere; basic mode has no title filter
@@ -452,14 +450,13 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             var firstOpen = -1, firstClose = -1, candidate;
             var attempts = 0;
             var lastError = null;
-            var contextMsg = contextLabel ? (' for ' + contextLabel) : '';
             firstOpen = str.indexOf('{');
             if (firstOpen != -1) {
                 do {
                     firstClose = str.lastIndexOf('}');
                     if (firstClose <= firstOpen) {
                         if (attempts > 0) {
-                            WriteLog('extractJSON: failed to parse JSON' + contextMsg + ' after ' + attempts + ' attempts. Last error: ' + lastError);
+                            WriteLog('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts. Last error: ' + lastError);
                         }
                         return null;
                     }
@@ -479,7 +476,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                 } while (firstOpen != -1);
                 // Exhausted search without success
                 if (attempts > 0) {
-                    WriteLog('extractJSON: failed to parse JSON' + contextMsg + ' after ' + attempts + ' attempts. Last error: ' + lastError);
+                    WriteLog('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts. Last error: ' + lastError);
                 }
                 return null;
             } else {
@@ -618,6 +615,16 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
 
         function WriteLog(msg) {
             console.log('Create Child Tasks: ' + msg);
+        }
+
+        // Returns a safe template name string for logging
+        function getTemplateName(taskTemplate) {
+            try {
+                var name = (taskTemplate && taskTemplate.name) ? taskTemplate.name : 'unknown';
+                return name;
+            } catch (e) {
+                return 'unknown';
+            }
         }
 
         return {
