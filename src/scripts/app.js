@@ -356,44 +356,29 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
          * @param {*} taskTemplate 
          */
         function IsValidTemplateWIT(currentWorkItem, taskTemplate) {
-            // Normalize and cache lowercased parent fields/tags once per work item
-            if (!currentWorkItem.__normalized) {
-                normalizeParentFields(currentWorkItem);
-            }
 
-            var desc = taskTemplate && taskTemplate.description ? taskTemplate.description : '';
-            var hasBrace = desc.indexOf('{') !== -1;
-            var hasApplywhenWord = /applywhen/i.test(desc);
-
-            // Try to extract a JSON object from the template description only when it likely contains filters
-            var jsonFilters = null;
-            if (hasBrace && hasApplywhenWord) {
-                var extracted = extractJSON(desc, getTemplateName(taskTemplate));
-                jsonFilters = extracted && extracted[0];
-            }
+            // Try to extract a JSON object from the template description
+            var extracted = extractJSON(
+                taskTemplate.description,
+                getTemplateName(taskTemplate)
+            );
+            var jsonFilters = extracted && extracted[0];
 
             // Proceed only if we have an object with an array applywhen
             if (jsonFilters && typeof jsonFilters === 'object' && Array.isArray(jsonFilters.applywhen)) {
 
-                // Precompile title wildcard into regex for each rule (if provided)
-                var escapeRegex = function (x) { return x.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1"); };
-
+                // Check whether any of the criteria specified in the child work item template JSON matches the current work item
                 var someMatch = jsonFilters.applywhen.some(function (el) {
                     try {
-                        if (typeof el['System.Title'] !== 'undefined' && el['System.Title'] !== null && typeof el.__titleRegex === 'undefined') {
-                            var r = String(el['System.Title']);
-                            el.__titleRegex = new RegExp('^' + r.split('*').map(escapeRegex).join('.*') + '$', 'i');
-                        }
-                        // Fail-fast order: cheapest comparisons first
                         return (
-                            matchField('System.WorkItemType', currentWorkItem, el) &&
-                            matchField('System.State', currentWorkItem, el) &&
-                            matchField('System.AreaPath', currentWorkItem, el) &&
-                            matchField('System.IterationPath', currentWorkItem, el) &&
                             matchField('System.BoardColumn', currentWorkItem, el) &&
                             matchField('System.BoardLane', currentWorkItem, el) &&
+                            matchField('System.State', currentWorkItem, el) &&
+                            matchField('System.Tags', currentWorkItem, el) &&
                             matchField('System.Title', currentWorkItem, el) &&
-                            matchField('System.Tags', currentWorkItem, el)
+                            matchField('System.AreaPath', currentWorkItem, el) &&
+                            matchField('System.IterationPath', currentWorkItem, el) &&
+                            matchField('System.WorkItemType', currentWorkItem, el)
                         );
                     } catch (e) {
                         // If a single rule is malformed, skip it instead of throwing
@@ -568,8 +553,6 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
          * @returns 
          */
         function matchField(fieldName, currentWorkItem, filterElement) {
-            // Use normalized cache when available
-            var norm = currentWorkItem && currentWorkItem.__normalized ? currentWorkItem.__normalized : null;
 
             // Get the filter value for the specific field (e.g. System.State)
             var filterVal = filterElement[fieldName];
@@ -582,21 +565,19 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             // Get the current value for the specific field (e.g. System.State)
             var curValRaw = currentWorkItem ? currentWorkItem[fieldName] : undefined;
 
-            // Title: wildcard match, case-insensitive, with optional precompiled regex
+            // Title: wildcard match, case-insensitive, null-safe
             if (fieldName === 'System.Title') {
-                var title = curValRaw == null ? '' : curValRaw.toString();
-                if (filterElement.__titleRegex instanceof RegExp) {
-                    return filterElement.__titleRegex.test(title);
-                }
+                var title = (curValRaw == null ? '' : curValRaw.toString());
                 var rule = (filterVal == null ? '' : filterVal.toString());
                 return matchWildcardString(title, rule);
             }
 
-            // Tags: normalize once and check that current contains all filter tags (case-insensitive)
+            // Tags: normalize to arrays and check that current contains all filter tags
             if (fieldName === 'System.Tags') {
                 var toTagArray = function (val) {
                     if (Array.isArray(val)) return val;
                     if (val == null) return [];
+                    // Azure DevOps uses semicolon-separated tags; accept commas/newlines too
                     return val
                         .toString()
                         .split(/[;\,\n]/)
@@ -604,21 +585,15 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                         .filter(function (s) { return s; });
                 };
 
-                var currentTagSet = norm && norm.tagsLowerSet ? norm.tagsLowerSet : (function(){
-                    var arr = toTagArray(curValRaw).map(function (s) { return s.toLowerCase(); });
-                    var set = {}; arr.forEach(function(t){ set[t] = true; });
-                    return set;
-                })();
+                var currentTags = toTagArray(curValRaw).map(function (s) { return s.toLowerCase(); });
                 var filterTags = toTagArray(filterVal).map(function (s) { return s.toLowerCase(); });
 
-                return filterTags.every(function (tag) { return !!currentTagSet[tag]; });
+                return filterTags.every(function (tag) { return currentTags.indexOf(tag) !== -1; });
             }
 
             // For non-tag fields: if filter provides an array, treat as any-of values (case-insensitive)
             if (Array.isArray(filterVal)) {
-                var curStr = norm && norm.cacheLower && norm.cacheLower[fieldName]
-                    ? norm.cacheLower[fieldName]
-                    : (curValRaw == null ? '' : curValRaw.toString().toLowerCase());
+                var curStr = (curValRaw == null ? '' : curValRaw.toString().toLowerCase());
                 return filterVal.some(function (v) {
                     return (v == null ? '' : v.toString().toLowerCase()) === curStr;
                 });
@@ -626,38 +601,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
 
             // Scalar compare (case-insensitive). If current value is missing, not a match
             if (curValRaw == null) return false;
-            var curLower = norm && norm.cacheLower && norm.cacheLower[fieldName]
-                ? norm.cacheLower[fieldName]
-                : curValRaw.toString().toLowerCase();
-            return filterVal.toString().toLowerCase() === curLower;
-        }
-
-        // Normalize and cache lowercased parent fields and tags
-        function normalizeParentFields(currentWorkItem) {
-            var cacheLower = {};
-            var takeLower = function (field) {
-                var v = currentWorkItem[field];
-                cacheLower[field] = (v == null ? '' : v.toString().toLowerCase());
-            };
-            takeLower('System.WorkItemType');
-            takeLower('System.State');
-            takeLower('System.AreaPath');
-            takeLower('System.IterationPath');
-            takeLower('System.BoardColumn');
-            takeLower('System.BoardLane');
-
-            var tagsRaw = currentWorkItem['System.Tags'];
-            var tagsArray = (tagsRaw == null ? [] : tagsRaw
-                .toString()
-                .split(/[;\,\n]/)
-                .map(function (s) { return s.trim().toLowerCase(); })
-                .filter(function (s) { return s; }));
-            var tagsLowerSet = {}; tagsArray.forEach(function (t) { tagsLowerSet[t] = true; });
-
-            currentWorkItem.__normalized = {
-                cacheLower: cacheLower,
-                tagsLowerSet: tagsLowerSet
-            };
+            return filterVal.toString().toLowerCase() === curValRaw.toString().toLowerCase();
         }
 
         /**
