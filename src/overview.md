@@ -10,9 +10,9 @@ Tired of manually creating the same set of child work items for each parent work
 
 Create Child Tasks adds a toolbar action to Azure DevOps work items that instantly creates multiple child tasks (or any other child work item types) from a parent work item using team-defined Templates. Templates are matched by simple rules or JSON filters (type, state, title wildcards, tags, area/iteration, etc.), and the corresponding child work items are automatically created.
 
-> **Note:** This extension builds on and enhances the original [1‑Click Child‑Links extension](https://marketplace.visualstudio.com/items?itemName=ruifig.vsts-work-item-one-click-child-links). The original has great core functionality but has not been updated since 2020 and has some known issues. This extension provides fixes, improved filtering, better error handling, expanded documentation, and active support.
-
 ![Create Child Work Items](img/create-child-tasks-screenshot-work-item-menu-item.png)
+
+> **Note:** This extension builds on and enhances the original [1‑Click Child‑Links extension](https://marketplace.visualstudio.com/items?itemName=ruifig.vsts-work-item-one-click-child-links). The original has great core functionality but has not been updated since 2020 and has some known issues. This extension provides fixes, improved filtering, better error handling, expanded documentation, and active support.
 
 **Key Features:**
 
@@ -35,7 +35,7 @@ Create Child Tasks adds a toolbar action to Azure DevOps work items that instant
 
 ## How-To Guide
 
-### Defining Task Templates
+### Defining Work Item Templates
 
 Create work item Templates via Project Settings → Boards → Team Configuration → Templates. 
 
@@ -94,7 +94,7 @@ Currently supported filter fields (in template Description JSON):
 - System.AreaPath
 - System.IterationPath
 
-Notes:
+**Notes:**
 
 - Multiple applywhen entries = OR (any entry matching will apply the template).
 - Arrays = OR across values for that field (with the exception of Tags).
@@ -265,7 +265,7 @@ Multiple rules (AND across rules, OR within rules):
 
 All notable changes to Create Child Tasks. Dates in YYYY-MM-DD.
 
-### 1.0.0 — 2025-12-02
+### 1.0.0 — 2025-12
 
 - Fixed: Broken Tag filtering
 - Fixed: Resolved "Error saving [object Object]" error message when creating child work items
@@ -275,7 +275,7 @@ All notable changes to Create Child Tasks. Dates in YYYY-MM-DD.
 - Added: Release Notes / Changelog
 - Changed: Improved end user documentation: Overview, Key Features, How-To, Examples, Troubleshooting, FAQs
 - Changed: Improved browser console logging
-- Changed: Marketplace lising updates: Description, Tags, enabling Q&A tab
+- Changed: Marketplace lising updates: Description, Tags
 
 ### 0.3.x — 2020
 
