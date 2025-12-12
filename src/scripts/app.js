@@ -2,6 +2,44 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
     function (_WorkItemServices, _WorkItemRestClient, workRestClient, Q, Controls, StatusIndicator, Dialogs) {
 
         var ctx = null;
+        var INIT_TS = null; // timestamp when create() starts
+
+        function logSinceInit(label, startTsOptional) {
+            var now = Date.now();
+            var sinceInit = INIT_TS ? (now - INIT_TS) : 0;
+            if (typeof startTsOptional === 'number') {
+                var phaseMs = now - startTsOptional;
+                WriteLog(label + ' in ' + phaseMs + ' ms (since init: ' + sinceInit + ' ms)');
+            } else {
+                WriteLog(label + ' (since init: ' + sinceInit + ' ms)');
+            }
+        }
+        var LOG_ENABLED = false; // set via configs/dev.json (perfLogs)
+
+        function loadEnvLoggingFlag() {
+            try {
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', 'configs/dev.json', true);
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState === 4) {
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            try {
+                                var cfg = JSON.parse(xhr.responseText);
+                                if (cfg && typeof cfg.perfLogs !== 'undefined') {
+                                    LOG_ENABLED = !!cfg.perfLogs;
+                                }
+                            } catch (e) {
+                                // ignore malformed config
+                            }
+                        }
+                        // silently ignore missing file (non-dev builds)
+                    }
+                };
+                xhr.send();
+            } catch (e) {
+                // ignore network errors
+            }
+        }
 
         function getWorkItemFormService() {
             return _WorkItemServices.WorkItemFormService.getService();
@@ -238,34 +276,47 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                 teamId: ctx.team.id
             };
 
+            var teamSettingsStart = Date.now();
             workClient.getTeamSettings(team)
                 .then(function (teamSettings) {
+                    logSinceInit('Team settings resolved', teamSettingsStart);
                     // Get the current values for a few of the common fields
+                    var wiStart = Date.now();
                     witClient.getWorkItem(workItemId)
                         .then(function (value) {
+                            logSinceInit('Fetched current work item', wiStart);
                             var currentWorkItem = value.fields;
 
                             currentWorkItem['System.Id'] = workItemId;
 
                             var workItemType = currentWorkItem["System.WorkItemType"];
+                            var childTypesStart = Date.now();
                             GetChildTypes(witClient, workItemType)
                                 .then(function (childTypes) {
+                                    logSinceInit('Resolved valid child types', childTypesStart);
                                     if (childTypes == null)
                                         return;
                                     // get Templates
+                                    var tmplFetchStart = Date.now();
                                     getTemplates(childTypes)
                                         .then(function (response) {
+                                            logSinceInit('Templates fetched', tmplFetchStart);
                                             if (response.length == 0) {
                                                 ShowDialog('No ' + childTypes + ' templates found. Please add ' + childTypes + ' templates for the project team.');
                                                 return;
                                             }
                                             // Create children alphabetically.
+                                            var sortStart = Date.now();
                                             var templates = response.sort(SortTemplates);
+                                            logSinceInit('Templates sorted (' + templates.length + ')', sortStart);
                                             var chain = Q.when();
+                                            var createStart = Date.now();
                                             templates.forEach(function (template) {
                                                 chain = chain.then(createChildFromTemplate(witClient, service, currentWorkItem, template, teamSettings));
                                             });
-                                            return chain;
+                                            return chain.then(function(){
+                                                logSinceInit('Child creation completed', createStart);
+                                            });
 
                                         });
                                 });
@@ -614,6 +665,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
         }
 
         function WriteLog(msg) {
+            if (!LOG_ENABLED) return;
             console.log('Create Child Tasks: ' + msg);
         }
 
@@ -630,7 +682,10 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
         return {
 
             create: function (context) {
+                loadEnvLoggingFlag();
+                INIT_TS = Date.now();
                 WriteLog('init');
+                logSinceInit('Init started');
 
                 ctx = VSS.getWebContext();
 
@@ -639,18 +694,21 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                         .then(function success(response) {
                             if (response == true) {
                                 //form is open
+                                logSinceInit('Form detected');
                                 AddTasksOnForm(service);
                             }
                             else {
                                 // on grid
                                 if (context.workItemIds && context.workItemIds.length > 0) {
 
+                                    logSinceInit('Grid detected: ' + context.workItemIds.length + ' ids');
                                     context.workItemIds.forEach(function (workItemId) {
                                         AddTasksOnGrid(workItemId);
                                     });
                                 }
                                 else if (context.id) {
                                     var workItemId = context.id;
+                                    logSinceInit('Grid detected: single id');
                                     AddTasksOnGrid(workItemId);
                                 }
                             }
