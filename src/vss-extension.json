@@ -6,9 +6,7 @@
     "description": "Create multiple child work items from pre-defined templates with a single click.",
     "public": true,
     "publisher": "wilksmatt",
-    "customerqnasupport": {
-        "enablemarketplaceqna": "true"
-    },
+    
     "repository": {
         "type": "git",
         "uri": "https://github.com/wilksmatt/azure-devops-extension-create-child-tasks"
