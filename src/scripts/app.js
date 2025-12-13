@@ -715,9 +715,11 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                 // Tags set (lowercased)
                 var tagsRaw = currentWorkItem['System.Tags'];
                 if (tagsRaw != null) {
-                    var arr = tagsRaw
-                        .toString()
-                        .split(/[;\,\n]/)
+                    // Azure DevOps stores tags as a single semicolon-delimited string. Be strict on ';' splitting,
+                    // and defensively normalize unicode whitespace to avoid hidden mismatch.
+                    var rawStr = tagsRaw.toString().replace(/\u00a0|\s+/g, ' ').trim();
+                    var arr = rawStr
+                        .split(/;+/)
                         .map(function (s) { return s.trim().toLowerCase(); })
                         .filter(function (s) { return s; });
                     var set = {};
@@ -755,18 +757,31 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
 
             // Tags: normalize to arrays and check that current contains all filter tags
             if (fieldName === 'System.Tags') {
+                // Accept common aliases if rule used different key names
+                if (typeof filterVal === 'undefined' || filterVal === null) {
+                    filterVal = (typeof filterElement['Tags'] !== 'undefined') ? filterElement['Tags'] : filterVal;
+                    filterVal = (typeof filterVal === 'undefined' || filterVal === null) && typeof filterElement['System.Tags-Add'] !== 'undefined' ? filterElement['System.Tags-Add'] : filterVal;
+                }
+
                 var toTagArray = function (val) {
-                    if (Array.isArray(val)) return val;
+                    if (Array.isArray(val)) return val.map(function (s) { return (s == null ? '' : s.toString()).trim().toLowerCase(); }).filter(function (s) { return s; });
                     if (val == null) return [];
-                    return val
-                        .toString()
-                        .split(/[;\,\n]/)
+                    // Filters may use commas or semicolons; support both. Normalize unicode spaces.
+                    var raw = val.toString().replace(/\u00a0|\s+/g, ' ').trim();
+                    return raw
+                        .split(/[;,]+/)
                         .map(function (s) { return s.trim().toLowerCase(); })
                         .filter(function (s) { return s; });
                 };
                 var filterTags = toTagArray(filterVal);
                 for (var i = 0; i < filterTags.length; i++) {
-                    if (!norm.tagsLowerSet[filterTags[i]]) return false;
+                    if (!norm.tagsLowerSet[filterTags[i]]) {
+                        if (LOG_ENABLED) {
+                            var present = Object.keys(norm.tagsLowerSet).join(', ');
+                            WriteLog('Tags mismatch: missing "' + filterTags[i] + '". Parent has: [' + present + ']');
+                        }
+                        return false;
+                    }
                 }
                 return true;
             }
