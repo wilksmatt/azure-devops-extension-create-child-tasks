@@ -4,6 +4,14 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
         var ctx = null;
         var INIT_TS = null; // timestamp when create() starts
 
+        /**
+         * Logs a checkpoint with elapsed time since init and optional phase duration.
+         * Uses `INIT_TS` as the start; if `startTsOptional` is provided, also logs phase ms.
+         * Output is gated by `LOG_ENABLED` via `WriteLog`.
+         * @param {string} label Human-friendly label for the checkpoint.
+         * @param {number} [startTsOptional] Optional phase start timestamp (ms since epoch).
+         * @returns {void}
+         */
         function logSinceInit(label, startTsOptional) {
             var now = Date.now();
             var sinceInit = INIT_TS ? (now - INIT_TS) : 0;
@@ -16,6 +24,10 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
         }
         var LOG_ENABLED = false; // set via configs/dev.json (perfLogs)
 
+        /**
+         * Loads the dev environment logging flag from `configs/dev.json` to gate console logs.
+         * Silently ignores missing or malformed configs.
+         */
         function loadEnvLoggingFlag() {
             try {
                 var xhr = new XMLHttpRequest();
@@ -41,10 +53,19 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             }
         }
 
+        /**
+         * Get the Work Item Form Service instance.
+         * @returns {Promise} A promise that resolves to the Work Item Form Service instance.
+         */
         function getWorkItemFormService() {
             return _WorkItemServices.WorkItemFormService.getService();
         }
 
+        /**
+         * Fetches all templates for the given work item types in the current project/team.
+         * @param {*} workItemTypes List of work item type names to fetch templates for.
+         * @returns Promise resolving to a flat array of template objects.
+         */
         function getTemplates(workItemTypes) {
 
             var requests = []
@@ -72,11 +93,23 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                 });
         }
 
+        /**
+         * Fetches a full template definition by ID for the current project/team.
+         * @param {*} id Template ID.
+         * @returns Promise resolving to the detailed template object.
+         */
         function getTemplate(id) {
             var witClient = _WorkItemRestClient.getClient();
             return witClient.getTemplate(ctx.project.id, ctx.team.id, id);
         }
 
+        /**
+         * Checks if a template field should be applied to the child work item.
+         * Skips unsupported keys and special tokens handled elsewhere.
+         * @param {*} taskTemplate Template object with fields.
+         * @param {string} key Field name.
+         * @returns {boolean} Whether the field is valid to process.
+         */
         function IsPropertyValid(taskTemplate, key) {
             if (taskTemplate.fields.hasOwnProperty(key) == false) {
                 return false;
@@ -94,6 +127,12 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             return true;
         }
 
+        /**
+         * Replaces `{ParentField}` tokens in a template field value using the parent work item.
+         * @param {string} fieldValue Template field value (may contain tokens).
+         * @param {*} currentWorkItem Parent work item fields map.
+         * @returns {string} Resolved field value.
+         */
         function replaceReferenceToParentField(fieldValue, currentWorkItem) {
             var filters = fieldValue.match(/[^{\}]+(?=})/g);
             if (filters) {
@@ -108,10 +147,12 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
         }
 
         /**
-         * Create the child task work item based on the rules from the task work item template.
-         * @param {*} currentWorkItem 
-         * @param {*} taskTemplate 
-         * @param {*} teamSettings 
+         * Builds the JSON patch document for a new child work item using a template.
+         * Copies/sets fields from the parent and template, honoring special tokens.
+         * @param {*} currentWorkItem Parent work item fields map.
+         * @param {*} taskTemplate Template object with fields and metadata.
+         * @param {*} teamSettings Team settings used for iteration resolution.
+         * @returns Array of JSON patch operations for work item creation.
          */
         function createWorkItemFromTemplate(currentWorkItem, taskTemplate, teamSettings) {
             
@@ -185,6 +226,15 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             return workItem;
         }
 
+        /**
+         * Creates a child work item, links it to the parent, and saves changes.
+         * Uses Work Item Form Service when available; falls back to REST update.
+         * @param {*} service Work Item Form Service instance or null.
+         * @param {*} currentWorkItem Parent work item fields map.
+         * @param {*} taskTemplate Template object used to build the child.
+         * @param {*} teamSettings Team settings used for iteration resolution.
+         * @returns {Promise} Resolves after creation and relation save.
+         */
         function createWorkItem(service, currentWorkItem, taskTemplate, teamSettings) {
 
             var witClient = _WorkItemRestClient.getClient();
@@ -253,6 +303,10 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                 });
         }
 
+        /**
+         * Entry point for the form context: resolves current id and creates children.
+         * @param {*} service Work Item Form Service instance.
+         */
         function AddTasksOnForm(service) {
 
             service.getId()
@@ -261,11 +315,23 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                 });
         }
 
+        /**
+         * Entry point for the grid context: creates children for a given id.
+         * @param {number} workItemId Parent work item id.
+         * @returns {Promise}
+         */
         function AddTasksOnGrid(workItemId) {
 
             return AddTasks(workItemId, null)
         }
 
+        /**
+         * Orchestrates fetching team settings, parent fields, templates, filtering, and creation.
+         * Prefetches template details in parallel; creates matched children sequentially.
+         * @param {number} workItemId Parent work item id.
+         * @param {*} service Work Item Form Service instance or null.
+         * @returns {Promise}
+         */
         function AddTasks(workItemId, service) {
 
             var witClient = _WorkItemRestClient.getClient();
@@ -309,42 +375,47 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                                             var sortStart = Date.now();
                                             var templates = response.sort(SortTemplates);
                                             logSinceInit('Templates sorted (' + templates.length + ')', sortStart);
-                                            var chain = Q.when();
-                                            var createStart = Date.now();
-                                            templates.forEach(function (template) {
-                                                chain = chain.then(createChildFromTemplate(witClient, service, currentWorkItem, template, teamSettings));
-                                            });
-                                            return chain.then(function(){
-                                                logSinceInit('Child creation completed', createStart);
+                                            // Prefetch all template details in parallel, then filter and create sequentially
+                                            var detailFetchStart = Date.now();
+                                            var detailPromises = templates.map(function(t){ return getTemplate(t.id).then(function(dt){ return dt; }, function(){ return null; }); });
+                                            return Q.all(detailPromises).then(function(details){
+                                                logSinceInit('Template details fetched', detailFetchStart);
+                                                // Filter templates by rule match using recommended order inside IsValidTemplateWIT
+                                                var toCreate = [];
+                                                for (var i = 0; i < details.length; i++) {
+                                                    var taskTemplate = details[i];
+                                                    if (!taskTemplate) continue;
+                                                    try {
+                                                        if (IsValidTemplateWIT(currentWorkItem, taskTemplate)) {
+                                                            toCreate.push(taskTemplate);
+                                                        }
+                                                    } catch (e) {
+                                                        // Skip malformed templates silently
+                                                    }
+                                                }
+                                                // Create sequentially to avoid relation/save races
+                                                var chain = Q.when();
+                                                var createStart = Date.now();
+                                                toCreate.forEach(function(taskTemplate){
+                                                    chain = chain.then(function(){
+                                                        return createWorkItem(service, currentWorkItem, taskTemplate, teamSettings).catch(function(err){
+                                                            if (LOG_ENABLED) {
+                                                                var msg = (err && (err.message || err.statusText)) ? (err.message || err.statusText) : (typeof err === 'string' ? err : JSON.stringify(err));
+                                                                WriteLog('Failed to create child from template "' + getTemplateName(taskTemplate) + '": ' + msg);
+                                                            }
+                                                            return Q.when();
+                                                        });
+                                                    });
+                                                });
+                                                return chain.then(function(){
+                                                    logSinceInit('Child creation completed', createStart);
+                                                });
                                             });
 
                                         });
                                 });
                         })
                 })
-        }
-
-        function createChildFromTemplate(witClient, service, currentWorkItem, template, teamSettings) {
-            return function () {
-                return getTemplate(template.id)
-                    .then(function (taskTemplate) {
-                        // Create child when filters match
-                        if (IsValidTemplateWIT(currentWorkItem, taskTemplate) && IsValidTemplateTitle(currentWorkItem, taskTemplate)) {
-                            // Return the promise so the chain waits and errors are handled upstream
-                            return createWorkItem(service, currentWorkItem, taskTemplate, teamSettings);
-                        }
-                        // No-op: maintain chain with a resolved promise
-                        return Q.when();
-                    })
-                    .catch(function (err) {
-                        // Swallow to avoid noisy unhandled rejections in console; log for diagnostics
-                        var msg = (err && (err.message || err.statusText)) ? (err.message || err.statusText) : (typeof err === 'string' ? err : JSON.stringify(err));
-                        var tName = (template && template.name) ? ('"' + template.name + '"') : 'unknown';
-                        var tId = (template && template.id) ? template.id : 'n/a';
-                        WriteLog('Failed to create child from template ' + tName + ' (id: ' + tId + '): ' + msg);
-                        return Q.when();
-                    });
-            };
         }
 
         /**
@@ -367,19 +438,30 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             // Proceed only if we have an object with an array applywhen
             if (jsonFilters && typeof jsonFilters === 'object' && Array.isArray(jsonFilters.applywhen)) {
 
-                // Check whether any of the criteria specified in the child work item template JSON matches the current work item
+                // Recommended order for cheapest-first checks; short-circuit on first mismatch
+                var orderedFields = [
+                    'System.WorkItemType',
+                    'System.State',
+                    'System.AreaPath',
+                    'System.IterationPath',
+                    'System.BoardColumn',
+                    'System.BoardLane',
+                    'System.Title',
+                    'System.Tags'
+                ];
+
                 var someMatch = jsonFilters.applywhen.some(function (el) {
                     try {
-                        return (
-                            matchField('System.BoardColumn', currentWorkItem, el) &&
-                            matchField('System.BoardLane', currentWorkItem, el) &&
-                            matchField('System.State', currentWorkItem, el) &&
-                            matchField('System.Tags', currentWorkItem, el) &&
-                            matchField('System.Title', currentWorkItem, el) &&
-                            matchField('System.AreaPath', currentWorkItem, el) &&
-                            matchField('System.IterationPath', currentWorkItem, el) &&
-                            matchField('System.WorkItemType', currentWorkItem, el)
-                        );
+                        for (var i = 0; i < orderedFields.length; i++) {
+                            var f = orderedFields[i];
+                            if (typeof el[f] === 'undefined') {
+                                continue; // skip fields not present in the rule
+                            }
+                            if (!matchField(f, currentWorkItem, el)) {
+                                return false; // short-circuit on first mismatch
+                            }
+                        }
+                        return true;
                     } catch (e) {
                         // If a single rule is malformed, skip it instead of throwing
                         WriteLog('Skipping malformed filter rule: ' + (e && e.message ? e.message : e));
@@ -408,21 +490,12 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             }
         }
 
-        function IsValidTemplateTitle(currentWorkItem, taskTemplate) {
-            // Title filtering is handled within JSON rules via IsValidTemplateWIT/matchField('System.Title').
-            // For non-JSON descriptions (basic bracket syntax), there is no title filter. Always allow.
-            try {
-                var extracted = extractJSON(
-                    taskTemplate && taskTemplate.description ? taskTemplate.description : "",
-                    getTemplateName(taskTemplate)
-                );
-                var hasJson = extracted && extracted[0] && typeof extracted[0] === 'object';
-                return true; // JSON case handled elsewhere; basic mode has no title filter
-            } catch (e) {
-                return true;
-            }
-        }
-
+        /**
+         * Finds a work item type category containing the given type name.
+         * @param {*} categories List of categories from the WIT client.
+         * @param {string} workItemType Work item type name.
+         * @returns {*} Matching category or undefined.
+         */
         function findWorkTypeCategory(categories, workItemType) {
             for (category of categories) {
                 var found = category.workItemTypes.find(function (w) { return w.name == workItemType; });
@@ -432,6 +505,12 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             }
         }
 
+        /**
+         * Resolves valid child work item types based on the parent type and team bug behavior.
+         * @param {*} witClient Work Item Tracking REST client.
+         * @param {string} workItemType Parent work item type.
+         * @returns {Promise<string[]>} Array of child type names.
+         */
         function GetChildTypes(witClient, workItemType) {
 
             return witClient.getWorkItemTypeCategories(VSS.getWebContext().project.name)
@@ -488,6 +567,12 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                 });
         }
 
+        /**
+         * Case-insensitive alphabetical comparator for template names.
+         * @param {*} a Template A.
+         * @param {*} b Template B.
+         * @returns {number} -1, 0, or 1.
+         */
         function SortTemplates(a, b) {
             var nameA = a.name.toLowerCase(), nameB = b.name.toLowerCase();
             if (nameA < nameB) //sort string ascending
@@ -497,45 +582,95 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             return 0; //default return value (no sorting)
         }
 
+        /**
+         * Extracts the first valid JSON object embedded in a freeform string.
+         * Returns parsed object with start/end indices; null if none found.
+         * @param {string} str Source string.
+         * @param {string} contextLabel Label for diagnostic logging.
+         * @returns {[object, number, number] | null}
+         */
         function extractJSON(str, contextLabel) {
-            var firstOpen = -1, firstClose = -1, candidate;
+            // Optimize: fast-path, precompute brace indices, cap attempts, and avoid repeated scans
+            str = str || '';
             var attempts = 0;
             var lastError = null;
-            firstOpen = str.indexOf('{');
-            if (firstOpen != -1) {
-                do {
-                    firstClose = str.lastIndexOf('}');
-                    if (firstClose <= firstOpen) {
-                        if (attempts > 0) {
-                            WriteLog('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts. Last error: ' + lastError);
-                        }
-                        return null;
-                    }
-                    do {
-                        candidate = str.substring(firstOpen, firstClose + 1);
-                        try {
-                            var res = JSON.parse(candidate);
-                            return [res, firstOpen, firstClose + 1];
-                        }
-                        catch (e) {
-                            attempts++;
-                            lastError = (e && e.message) ? e.message : e;
-                        }
-                        firstClose = str.substr(0, firstClose).lastIndexOf('}');
-                    } while (firstClose > firstOpen);
-                    firstOpen = str.indexOf('{', firstOpen + 1);
-                } while (firstOpen != -1);
-                // Exhausted search without success
-                if (attempts > 0) {
-                    WriteLog('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts. Last error: ' + lastError);
+            var MAX_ATTEMPTS = 100; // safety cap to avoid pathological cases
+
+            // Fast-path: try whole trimmed string if it looks like a JSON object
+            var trimmed = str.trim();
+            if (trimmed.length > 1 && trimmed.charAt(0) === '{' && trimmed.charAt(trimmed.length - 1) === '}') {
+                try {
+                    var fastRes = JSON.parse(trimmed);
+                    // Return indices relative to original string
+                    var startIdx = str.indexOf(trimmed);
+                    return [fastRes, startIdx, startIdx + trimmed.length];
+                } catch (e) {
+                    // Fall through to robust search
+                    lastError = (e && e.message) ? e.message : e;
                 }
-                return null;
-            } else {
+            }
+
+            // Precompute positions of opening and closing braces
+            var opens = [];
+            var closes = [];
+            for (var i = 0; i < str.length; i++) {
+                var ch = str.charAt(i);
+                if (ch === '{') opens.push(i);
+                else if (ch === '}') closes.push(i);
+            }
+            if (opens.length === 0 || closes.length === 0) {
                 return null;
             }
+
+            // Helper: quick brace-balance heuristic on slice to skip obviously invalid spans
+            function isPossiblyBalanced(start, end) {
+                var bal = 0;
+                for (var j = start; j <= end; j++) {
+                    var c = str.charAt(j);
+                    if (c === '{') bal++;
+                    else if (c === '}') {
+                        bal--;
+                        if (bal < 0) return false;
+                    }
+                }
+                return bal >= 0; // allow extra opens; JSON.parse will be final arbiter
+            }
+
+            // Try pairs: for each open from left, try closes from right
+            for (var oi = 0; oi < opens.length; oi++) {
+                var start = opens[oi];
+                for (var ci = closes.length - 1; ci >= 0; ci--) {
+                    var end = closes[ci];
+                    if (end <= start) break;
+                    if (!isPossiblyBalanced(start, end)) continue;
+                    var candidate = str.substring(start, end + 1);
+                    try {
+                        var res = JSON.parse(candidate);
+                        return [res, start, end + 1];
+                    } catch (e) {
+                        attempts++;
+                        lastError = (e && e.message) ? e.message : e;
+                        if (attempts >= MAX_ATTEMPTS) {
+                            if (LOG_ENABLED) {
+                                WriteLog('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts (cap). Last error: ' + lastError);
+                            }
+                            return null;
+                        }
+                    }
+                }
+            }
+
+            if (attempts > 0 && LOG_ENABLED) {
+                WriteLog('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts. Last error: ' + lastError);
+            }
+            return null;
         }
 
-        // TODO: Remove if no longer used
+        /**
+         * Checks whether a string contains valid JSON.
+         * @param {string} str Input string.
+         * @returns {boolean}
+         */
         function IsJsonString(str) {
             try {
                 JSON.parse(str);
@@ -554,6 +689,46 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
          */
         function matchField(fieldName, currentWorkItem, filterElement) {
 
+            // Build or reuse normalization caches on the current work item to avoid repeated allocations
+            var norm = currentWorkItem.__norm;
+            if (!norm) {
+                norm = {
+                    lower: {},
+                    tagsLowerSet: null,
+                    titleRegexCache: {}
+                };
+                // Lowercase common scalar fields once
+                var scalarFields = [
+                    'System.WorkItemType',
+                    'System.State',
+                    'System.AreaPath',
+                    'System.IterationPath',
+                    'System.BoardColumn',
+                    'System.BoardLane',
+                    'System.Title'
+                ];
+                for (var si = 0; si < scalarFields.length; si++) {
+                    var sf = scalarFields[si];
+                    var v = currentWorkItem[sf];
+                    norm.lower[sf] = (v == null ? '' : v.toString().toLowerCase());
+                }
+                // Tags set (lowercased)
+                var tagsRaw = currentWorkItem['System.Tags'];
+                if (tagsRaw != null) {
+                    var arr = tagsRaw
+                        .toString()
+                        .split(/[;\,\n]/)
+                        .map(function (s) { return s.trim().toLowerCase(); })
+                        .filter(function (s) { return s; });
+                    var set = {};
+                    for (var ti = 0; ti < arr.length; ti++) { set[arr[ti]] = true; }
+                    norm.tagsLowerSet = set;
+                } else {
+                    norm.tagsLowerSet = {};
+                }
+                currentWorkItem.__norm = norm;
+            }
+
             // Get the filter value for the specific field (e.g. System.State)
             var filterVal = filterElement[fieldName];
 
@@ -565,11 +740,17 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             // Get the current value for the specific field (e.g. System.State)
             var curValRaw = currentWorkItem ? currentWorkItem[fieldName] : undefined;
 
-            // Title: wildcard match, case-insensitive, null-safe
+            // Title: wildcard match, case-insensitive, null-safe, with regex cache
             if (fieldName === 'System.Title') {
-                var title = (curValRaw == null ? '' : curValRaw.toString());
+                var title = norm.lower['System.Title'];
                 var rule = (filterVal == null ? '' : filterVal.toString());
-                return matchWildcardString(title, rule);
+                var cached = norm.titleRegexCache[rule];
+                if (!cached) {
+                    var escapeRegex = function (x) { return x.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1"); };
+                    cached = new RegExp("^" + rule.split("*").map(escapeRegex).join(".*") + "$", "i");
+                    norm.titleRegexCache[rule] = cached;
+                }
+                return cached.test(title);
             }
 
             // Tags: normalize to arrays and check that current contains all filter tags
@@ -577,23 +758,22 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                 var toTagArray = function (val) {
                     if (Array.isArray(val)) return val;
                     if (val == null) return [];
-                    // Azure DevOps uses semicolon-separated tags; accept commas/newlines too
                     return val
                         .toString()
                         .split(/[;\,\n]/)
-                        .map(function (s) { return s.trim(); })
+                        .map(function (s) { return s.trim().toLowerCase(); })
                         .filter(function (s) { return s; });
                 };
-
-                var currentTags = toTagArray(curValRaw).map(function (s) { return s.toLowerCase(); });
-                var filterTags = toTagArray(filterVal).map(function (s) { return s.toLowerCase(); });
-
-                return filterTags.every(function (tag) { return currentTags.indexOf(tag) !== -1; });
+                var filterTags = toTagArray(filterVal);
+                for (var i = 0; i < filterTags.length; i++) {
+                    if (!norm.tagsLowerSet[filterTags[i]]) return false;
+                }
+                return true;
             }
 
             // For non-tag fields: if filter provides an array, treat as any-of values (case-insensitive)
             if (Array.isArray(filterVal)) {
-                var curStr = (curValRaw == null ? '' : curValRaw.toString().toLowerCase());
+                var curStr = norm.lower[fieldName] || (curValRaw == null ? '' : curValRaw.toString().toLowerCase());
                 return filterVal.some(function (v) {
                     return (v == null ? '' : v.toString().toLowerCase()) === curStr;
                 });
@@ -601,49 +781,14 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
 
             // Scalar compare (case-insensitive). If current value is missing, not a match
             if (curValRaw == null) return false;
-            return filterVal.toString().toLowerCase() === curValRaw.toString().toLowerCase();
+            var curLower = norm.lower[fieldName] || curValRaw.toString().toLowerCase();
+            return filterVal.toString().toLowerCase() === curLower;
         }
 
         /**
-         * Compare a strong to another wildcard string (i.e. rule). Examples:
-         * - "a*b" => everything that starts with "a" and ends with "b"
-         * - "a*" => everything that starts with "a"
-         * - "*b" => everything that ends with "b"
-         * - "*a*" => everything that has an "a" in it
-         * - "*a*b*"=> everything that has an "a" in it, followed by anything, followed by a "b", followed by anything
-         * https://stackoverflow.com/questions/26246601/wildcard-string-comparison-in-javascript
-         * @param {*} str 
-         * @param {*} rule 
+         * Shows a modal message dialog in Azure DevOps.
+         * @param {string} message Message text to display.
          */
-        function matchWildcardString(str, rule) {
-            // Coerce to strings and do case-insensitive match with safe escaping
-            var s = (str == null ? '' : String(str));
-            var r = (rule == null ? '' : String(rule));
-            var escapeRegex = function (x) { return x.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1"); };
-            return new RegExp("^" + r.split("*").map(escapeRegex).join(".*") + "$", "i").test(s);
-        }
-
-        /**
-         * Compare two arrays.
-         * @param {*} a 
-         * @param {*} b 
-         */
-        function arraysEqual(a, b) {
-            if (a === b) return true;
-            if (a == null || b == null) return false;
-            if (a.length != b.length) return false;
-
-            // If you don't care about the order of the elements inside
-            // the array, you should sort both arrays here.
-            // Please note that calling sort on an array will modify that array.
-            // you might want to clone your array first.
-
-            for (var i = 0; i < a.length; ++i) {
-                if (a[i] !== b[i]) return false;
-            }
-            return true;
-        }
-
         function ShowDialog(message) {
 
             var dialogOptions = {
@@ -664,12 +809,20 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             });
         }
 
+        /**
+         * Writes a namespaced log message when perf logging is enabled.
+         * @param {string} msg Message to log.
+         */
         function WriteLog(msg) {
             if (!LOG_ENABLED) return;
             console.log('Create Child Tasks: ' + msg);
         }
 
-        // Returns a safe template name string for logging
+        /**
+         * Safely returns a template's display name for logging.
+         * @param {*} taskTemplate Template object.
+         * @returns {string}
+         */
         function getTemplateName(taskTemplate) {
             try {
                 var name = (taskTemplate && taskTemplate.name) ? taskTemplate.name : 'unknown';
