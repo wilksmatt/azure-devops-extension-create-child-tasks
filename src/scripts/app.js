@@ -3,6 +3,9 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
 
         var ctx = null;
         var INIT_TS = null; // timestamp when create() starts
+        var LOG_ENABLED = false; // set via configs/dev.json (perfLogs)
+
+        // ===== Startup & Logging =====
 
         /**
          * Logs a checkpoint with elapsed time since init and optional phase duration.
@@ -17,12 +20,12 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             var sinceInit = INIT_TS ? (now - INIT_TS) : 0;
             if (typeof startTsOptional === 'number') {
                 var phaseMs = now - startTsOptional;
-                WriteLog(label + ' in ' + phaseMs + ' ms (since init: ' + sinceInit + ' ms)');
+                writeLog(label + ' in ' + phaseMs + ' ms (since init: ' + sinceInit + ' ms)');
             } else {
-                WriteLog(label + ' (since init: ' + sinceInit + ' ms)');
+                writeLog(label + ' (since init: ' + sinceInit + ' ms)');
             }
         }
-        var LOG_ENABLED = false; // set via configs/dev.json (perfLogs)
+        
 
         /**
          * Loads the dev environment logging flag from `configs/dev.json` to gate console logs.
@@ -54,53 +57,22 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
         }
 
         /**
+         * Writes a namespaced log message when perf logging is enabled.
+         * @param {string} msg Message to log.
+         */
+        function writeLog(msg) {
+            if (!LOG_ENABLED) return;
+            console.log('Create Child Tasks: ' + msg);
+        }
+
+        // ===== Entry Points =====
+
+        /**
          * Get the Work Item Form Service instance.
          * @returns {Promise} A promise that resolves to the Work Item Form Service instance.
          */
         function getWorkItemFormService() {
             return _WorkItemServices.WorkItemFormService.getService();
-        }
-
-        /**
-         * Fetches all templates for the given work item types in the current project/team.
-         * @param {*} workItemTypes List of work item type names to fetch templates for.
-         * @returns Promise resolving to a flat array of template objects.
-         */
-        function getTemplates(workItemTypes) {
-
-            var requests = []
-            var witClient = _WorkItemRestClient.getClient();
-
-            workItemTypes.forEach(function (workItemType) {
-
-                var request = witClient.getTemplates(ctx.project.id, ctx.team.id, workItemType);
-                requests.push(request);
-            }, this);
-
-            return Q.all(requests)
-                .then(function (templateTypes) {
-
-                    var templates = [];
-                    templateTypes.forEach(function (templateType) {
-                        if (templateType.length > 0) {
-
-                            templateType.forEach(function (element) {
-                                templates.push(element)
-                            }, this);
-                        }
-                    }, this);
-                    return templates;
-                });
-        }
-
-        /**
-         * Fetches a full template definition by ID for the current project/team.
-         * @param {*} id Template ID.
-         * @returns Promise resolving to the detailed template object.
-         */
-        function getTemplate(id) {
-            var witClient = _WorkItemRestClient.getClient();
-            return witClient.getTemplate(ctx.project.id, ctx.team.id, id);
         }
 
         /**
@@ -110,7 +82,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
          * @param {string} key Field name.
          * @returns {boolean} Whether the field is valid to process.
          */
-        function IsPropertyValid(taskTemplate, key) {
+        function isPropertyValid(taskTemplate, key) {
             if (taskTemplate.fields.hasOwnProperty(key) == false) {
                 return false;
             }
@@ -163,7 +135,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             for (var key in taskTemplate.fields) {
 
                 // Check whether we are supporting the specific field / property in the task template
-                if (IsPropertyValid(taskTemplate, key)) {
+                if (isPropertyValid(taskTemplate, key)) {
 
                     // If field value is empty, copy the value from the parent
                     if (taskTemplate.fields[key] == '') {
@@ -203,10 +175,10 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             } else if (taskTemplate.fields['System.IterationPath'].toLowerCase() == '@currentiteration') {
                 // Check that teamSettings.defaultIteration is not null and has a path
                 if (teamSettings && teamSettings.defaultIteration && teamSettings.defaultIteration.path) {
-                    WriteLog('Info: Creating work item (template: ' + getTemplateName(taskTemplate) + ') with team default iteration path.');
+                    writeLog('Info: Creating work item (template: ' + getTemplateName(taskTemplate) + ') with team default iteration path.');
                     workItem.push({ "op": "add", "path": "/fields/System.IterationPath", "value": teamSettings.backlogIteration.name + teamSettings.defaultIteration.path })
                 } else {
-                    WriteLog('Warning: No default or current iteration path defined in team settings for template ' + getTemplateName(taskTemplate) + '. Falling back to parent iteration path.');
+                    writeLog('Warning: No default or current iteration path defined in team settings for template ' + getTemplateName(taskTemplate) + '. Falling back to parent iteration path.');
                     workItem.push({ "op": "add", "path": "/fields/System.IterationPath", "value": currentWorkItem['System.IterationPath'] })
                 }
             }
@@ -274,7 +246,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                             });
                         }, function (err) {
                             var msg = (err && (err.message || err.statusText)) ? (err.message || err.statusText) : (typeof err === 'string' ? err : JSON.stringify(err));
-                            WriteLog('Failed to add relation for template ' + getTemplateName(taskTemplate) + ': ' + msg);
+                            writeLog('Failed to add relation for template ' + getTemplateName(taskTemplate) + ': ' + msg);
                             // Re-throw to be handled by upstream catch
                             throw err;
                         });
@@ -307,11 +279,11 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
          * Entry point for the form context: resolves current id and creates children.
          * @param {*} service Work Item Form Service instance.
          */
-        function AddTasksOnForm(service) {
+        function addTasksOnForm(service) {
 
             service.getId()
                 .then(function (workItemId) {
-                    return AddTasks(workItemId, service)
+                    return addTasks(workItemId, service)
                 });
         }
 
@@ -320,9 +292,9 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
          * @param {number} workItemId Parent work item id.
          * @returns {Promise}
          */
-        function AddTasksOnGrid(workItemId) {
+        function addTasksOnGrid(workItemId) {
 
-            return AddTasks(workItemId, null)
+            return addTasks(workItemId, null)
         }
 
         /**
@@ -332,7 +304,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
          * @param {*} service Work Item Form Service instance or null.
          * @returns {Promise}
          */
-        function AddTasks(workItemId, service) {
+        function addTasks(workItemId, service) {
 
             var witClient = _WorkItemRestClient.getClient();
             var workClient = workRestClient.getClient();
@@ -357,7 +329,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
 
                             var workItemType = currentWorkItem["System.WorkItemType"];
                             var childTypesStart = Date.now();
-                            GetChildTypes(witClient, workItemType)
+                            getChildTypes(witClient, workItemType)
                                 .then(function (childTypes) {
                                     logSinceInit('Resolved valid child types', childTypesStart);
                                     if (childTypes == null)
@@ -368,12 +340,12 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                                         .then(function (response) {
                                             logSinceInit('Templates fetched', tmplFetchStart);
                                             if (response.length == 0) {
-                                                ShowDialog('No ' + childTypes + ' templates found. Please add ' + childTypes + ' templates for the project team.');
+                                                showDialog('No ' + childTypes + ' templates found. Please add ' + childTypes + ' templates for the project team.');
                                                 return;
                                             }
                                             // Create children alphabetically.
                                             var sortStart = Date.now();
-                                            var templates = response.sort(SortTemplates);
+                                            var templates = response.sort(sortTemplates);
                                             logSinceInit('Templates sorted (' + templates.length + ')', sortStart);
                                             // Prefetch all template details in parallel, then filter and create sequentially
                                             var detailFetchStart = Date.now();
@@ -386,7 +358,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                                                     var taskTemplate = details[i];
                                                     if (!taskTemplate) continue;
                                                     try {
-                                                        if (IsValidTemplateWIT(currentWorkItem, taskTemplate)) {
+                                                        if (isValidTemplateWIT(currentWorkItem, taskTemplate)) {
                                                             toCreate.push(taskTemplate);
                                                         }
                                                     } catch (e) {
@@ -401,7 +373,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                                                         return createWorkItem(service, currentWorkItem, taskTemplate, teamSettings).catch(function(err){
                                                             if (LOG_ENABLED) {
                                                                 var msg = (err && (err.message || err.statusText)) ? (err.message || err.statusText) : (typeof err === 'string' ? err : JSON.stringify(err));
-                                                                WriteLog('Failed to create child from template "' + getTemplateName(taskTemplate) + '": ' + msg);
+                                                                writeLog('Failed to create child from template "' + getTemplateName(taskTemplate) + '": ' + msg);
                                                             }
                                                             return Q.when();
                                                         });
@@ -418,6 +390,52 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                 })
         }
 
+        // ===== Data Fetching =====
+
+        /**
+         * Fetches all templates for the given work item types in the current project/team.
+         * @param {*} workItemTypes List of work item type names to fetch templates for.
+         * @returns Promise resolving to a flat array of template objects.
+         */
+        function getTemplates(workItemTypes) {
+
+            var requests = []
+            var witClient = _WorkItemRestClient.getClient();
+
+            workItemTypes.forEach(function (workItemType) {
+
+                var request = witClient.getTemplates(ctx.project.id, ctx.team.id, workItemType);
+                requests.push(request);
+            }, this);
+
+            return Q.all(requests)
+                .then(function (templateTypes) {
+
+                    var templates = [];
+                    templateTypes.forEach(function (templateType) {
+                        if (templateType.length > 0) {
+
+                            templateType.forEach(function (element) {
+                                templates.push(element)
+                            }, this);
+                        }
+                    }, this);
+                    return templates;
+                });
+        }
+
+        /**
+         * Fetches a full template definition by ID for the current project/team.
+         * @param {*} id Template ID.
+         * @returns Promise resolving to the detailed template object.
+         */
+        function getTemplate(id) {
+            var witClient = _WorkItemRestClient.getClient();
+            return witClient.getTemplate(ctx.project.id, ctx.team.id, id);
+        }
+
+        // ===== Matching & Filtering =====
+
         /**
          * Check whether the criteria provided in the child work item template description matches the 
          * current work item. There are two different ways to provide criteria: 1) Using JSON to specify 
@@ -426,7 +444,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
          * @param {*} currentWorkItem 
          * @param {*} taskTemplate 
          */
-        function IsValidTemplateWIT(currentWorkItem, taskTemplate) {
+        function isValidTemplateWIT(currentWorkItem, taskTemplate) {
 
             // Try to extract a JSON object from the template description
             var extracted = extractJSON(
@@ -464,7 +482,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                         return true;
                     } catch (e) {
                         // If a single rule is malformed, skip it instead of throwing
-                        WriteLog('Skipping malformed filter rule: ' + (e && e.message ? e.message : e));
+                        writeLog('Skipping malformed filter rule: ' + (e && e.message ? e.message : e));
                         return false;
                     }
                 });
@@ -488,196 +506,6 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                 } 
                 return false;
             }
-        }
-
-        /**
-         * Finds a work item type category containing the given type name.
-         * @param {*} categories List of categories from the WIT client.
-         * @param {string} workItemType Work item type name.
-         * @returns {*} Matching category or undefined.
-         */
-        function findWorkTypeCategory(categories, workItemType) {
-            for (category of categories) {
-                var found = category.workItemTypes.find(function (w) { return w.name == workItemType; });
-                if (found != null) {
-                    return category;
-                }
-            }
-        }
-
-        /**
-         * Resolves valid child work item types based on the parent type and team bug behavior.
-         * @param {*} witClient Work Item Tracking REST client.
-         * @param {string} workItemType Parent work item type.
-         * @returns {Promise<string[]>} Array of child type names.
-         */
-        function GetChildTypes(witClient, workItemType) {
-
-            return witClient.getWorkItemTypeCategories(VSS.getWebContext().project.name)
-                .then(function (response) {
-                    var categories = response;
-                    var category = findWorkTypeCategory(categories, workItemType);
-
-                    if (category !== null) {
-                        var requests = [];
-                        var workClient = workRestClient.getClient();
-
-                        var team = {
-                            projectId: ctx.project.id,
-                            teamId: ctx.team.id
-                        };
-
-                        bugsBehavior = workClient.getTeamSettings(team).bugsBehavior; //Off, AsTasks, AsRequirements
-
-                        if (category.referenceName === 'Microsoft.EpicCategory') {
-                            return witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.FeatureCategory')
-                                .then(function (response) {
-                                    var category = response;
-
-                                    return category.workItemTypes.map(function (item) { return item.name; });
-                                });
-                        } else if (category.referenceName === 'Microsoft.FeatureCategory') {
-                            requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.RequirementCategory'));
-                            if (bugsBehavior === 'AsRequirements') { requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.BugCategory')); }
-                        } else if (category.referenceName === 'Microsoft.RequirementCategory') {
-                            requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.TaskCategory'));
-                            if (bugsBehavior === 'AsTasks') { requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.BugCategory')); }
-                        } else if (category.referenceName === 'Microsoft.BugCategory' && bugsBehavior === 'AsRequirements') {
-                            requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.TaskCategory'));
-                        } else if (category.referenceName === 'Microsoft.TaskCategory') {
-                            requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.TaskCategory'));
-                        } else if (category.referenceName == 'Microsoft.BugCategory') {
-                            requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.TaskCategory'));
-                        }
-
-                        return Q.all(requests)
-                            .then(function (response) {
-                                var categories = response;
-
-                                var result = [];
-                                categories.forEach(function (category) {
-                                    category.workItemTypes.forEach(function (workItemType) {
-                                        result.push(workItemType.name);
-                                    });
-                                });
-
-                                return result;
-                            });
-                    }
-                });
-        }
-
-        /**
-         * Case-insensitive alphabetical comparator for template names.
-         * @param {*} a Template A.
-         * @param {*} b Template B.
-         * @returns {number} -1, 0, or 1.
-         */
-        function SortTemplates(a, b) {
-            var nameA = a.name.toLowerCase(), nameB = b.name.toLowerCase();
-            if (nameA < nameB) //sort string ascending
-                return -1;
-            if (nameA > nameB)
-                return 1;
-            return 0; //default return value (no sorting)
-        }
-
-        /**
-         * Extracts the first valid JSON object embedded in a freeform string.
-         * Returns parsed object with start/end indices; null if none found.
-         * @param {string} str Source string.
-         * @param {string} contextLabel Label for diagnostic logging.
-         * @returns {[object, number, number] | null}
-         */
-        function extractJSON(str, contextLabel) {
-            // Optimize: fast-path, precompute brace indices, cap attempts, and avoid repeated scans
-            str = str || '';
-            var attempts = 0;
-            var lastError = null;
-            var MAX_ATTEMPTS = 100; // safety cap to avoid pathological cases
-
-            // Fast-path: try whole trimmed string if it looks like a JSON object
-            var trimmed = str.trim();
-            if (trimmed.length > 1 && trimmed.charAt(0) === '{' && trimmed.charAt(trimmed.length - 1) === '}') {
-                try {
-                    var fastRes = JSON.parse(trimmed);
-                    // Return indices relative to original string
-                    var startIdx = str.indexOf(trimmed);
-                    return [fastRes, startIdx, startIdx + trimmed.length];
-                } catch (e) {
-                    // Fall through to robust search
-                    lastError = (e && e.message) ? e.message : e;
-                }
-            }
-
-            // Precompute positions of opening and closing braces
-            var opens = [];
-            var closes = [];
-            for (var i = 0; i < str.length; i++) {
-                var ch = str.charAt(i);
-                if (ch === '{') opens.push(i);
-                else if (ch === '}') closes.push(i);
-            }
-            if (opens.length === 0 || closes.length === 0) {
-                return null;
-            }
-
-            // Helper: quick brace-balance heuristic on slice to skip obviously invalid spans
-            function isPossiblyBalanced(start, end) {
-                var bal = 0;
-                for (var j = start; j <= end; j++) {
-                    var c = str.charAt(j);
-                    if (c === '{') bal++;
-                    else if (c === '}') {
-                        bal--;
-                        if (bal < 0) return false;
-                    }
-                }
-                return bal >= 0; // allow extra opens; JSON.parse will be final arbiter
-            }
-
-            // Try pairs: for each open from left, try closes from right
-            for (var oi = 0; oi < opens.length; oi++) {
-                var start = opens[oi];
-                for (var ci = closes.length - 1; ci >= 0; ci--) {
-                    var end = closes[ci];
-                    if (end <= start) break;
-                    if (!isPossiblyBalanced(start, end)) continue;
-                    var candidate = str.substring(start, end + 1);
-                    try {
-                        var res = JSON.parse(candidate);
-                        return [res, start, end + 1];
-                    } catch (e) {
-                        attempts++;
-                        lastError = (e && e.message) ? e.message : e;
-                        if (attempts >= MAX_ATTEMPTS) {
-                            if (LOG_ENABLED) {
-                                WriteLog('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts (cap). Last error: ' + lastError);
-                            }
-                            return null;
-                        }
-                    }
-                }
-            }
-
-            if (attempts > 0 && LOG_ENABLED) {
-                WriteLog('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts. Last error: ' + lastError);
-            }
-            return null;
-        }
-
-        /**
-         * Checks whether a string contains valid JSON.
-         * @param {string} str Input string.
-         * @returns {boolean}
-         */
-        function IsJsonString(str) {
-            try {
-                JSON.parse(str);
-            } catch (e) {
-                return false;
-            }
-            return true;
         }
 
         /**
@@ -776,10 +604,6 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                 var filterTags = toTagArray(filterVal);
                 for (var i = 0; i < filterTags.length; i++) {
                     if (!norm.tagsLowerSet[filterTags[i]]) {
-                        if (LOG_ENABLED) {
-                            var present = Object.keys(norm.tagsLowerSet).join(', ');
-                            WriteLog('Tags mismatch: missing "' + filterTags[i] + '". Parent has: [' + present + ']');
-                        }
                         return false;
                     }
                 }
@@ -800,11 +624,191 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             return filterVal.toString().toLowerCase() === curLower;
         }
 
+        // ===== Child Type Resolution =====
+        /**
+         * Finds a work item type category containing the given type name.
+         * @param {*} categories List of categories from the WIT client.
+         * @param {string} workItemType Work item type name.
+         * @returns {*} Matching category or undefined.
+         */
+        function findWorkTypeCategory(categories, workItemType) {
+            for (category of categories) {
+                var found = category.workItemTypes.find(function (w) { return w.name == workItemType; });
+                if (found != null) {
+                    return category;
+                }
+            }
+        }
+
+        /**
+         * Resolves valid child work item types based on the parent type and team bug behavior.
+         * @param {*} witClient Work Item Tracking REST client.
+         * @param {string} workItemType Parent work item type.
+         * @returns {Promise<string[]>} Array of child type names.
+         */
+        function getChildTypes(witClient, workItemType) {
+
+            return witClient.getWorkItemTypeCategories(VSS.getWebContext().project.name)
+                .then(function (response) {
+                    var categories = response;
+                    var category = findWorkTypeCategory(categories, workItemType);
+
+                    if (category !== null) {
+                        var requests = [];
+                        var workClient = workRestClient.getClient();
+
+                        var team = {
+                            projectId: ctx.project.id,
+                            teamId: ctx.team.id
+                        };
+
+                        bugsBehavior = workClient.getTeamSettings(team).bugsBehavior; //Off, AsTasks, AsRequirements
+
+                        if (category.referenceName === 'Microsoft.EpicCategory') {
+                            return witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.FeatureCategory')
+                                .then(function (response) {
+                                    var category = response;
+
+                                    return category.workItemTypes.map(function (item) { return item.name; });
+                                });
+                        } else if (category.referenceName === 'Microsoft.FeatureCategory') {
+                            requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.RequirementCategory'));
+                            if (bugsBehavior === 'AsRequirements') { requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.BugCategory')); }
+                        } else if (category.referenceName === 'Microsoft.RequirementCategory') {
+                            requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.TaskCategory'));
+                            if (bugsBehavior === 'AsTasks') { requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.BugCategory')); }
+                        } else if (category.referenceName === 'Microsoft.BugCategory' && bugsBehavior === 'AsRequirements') {
+                            requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.TaskCategory'));
+                        } else if (category.referenceName === 'Microsoft.TaskCategory') {
+                            requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.TaskCategory'));
+                        } else if (category.referenceName == 'Microsoft.BugCategory') {
+                            requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.TaskCategory'));
+                        }
+
+                        return Q.all(requests)
+                            .then(function (response) {
+                                var categories = response;
+
+                                var result = [];
+                                categories.forEach(function (category) {
+                                    category.workItemTypes.forEach(function (workItemType) {
+                                        result.push(workItemType.name);
+                                    });
+                                });
+
+                                return result;
+                            });
+                    }
+
+                });
+        }
+
+        // ===== Utilities =====
+
+        /**
+         * Case-insensitive alphabetical comparator for template names.
+         * @param {*} a Template A.
+         * @param {*} b Template B.
+         * @returns {number} -1, 0, or 1.
+         */
+        function sortTemplates(a, b) {
+            var nameA = a.name.toLowerCase(), nameB = b.name.toLowerCase();
+            if (nameA < nameB) //sort string ascending
+                return -1;
+            if (nameA > nameB)
+                return 1;
+            return 0; //default return value (no sorting)
+        }
+
+        /**
+         * Extracts the first valid JSON object embedded in a freeform string.
+         * Returns parsed object with start/end indices; null if none found.
+         * @param {string} str Source string.
+         * @param {string} contextLabel Label for diagnostic logging.
+         * @returns {[object, number, number] | null}
+         */
+        function extractJSON(str, contextLabel) {
+            // Optimize: fast-path, precompute brace indices, cap attempts, and avoid repeated scans
+            str = str || '';
+            var attempts = 0;
+            var lastError = null;
+            var MAX_ATTEMPTS = 100; // safety cap to avoid pathological cases
+
+            // Fast-path: try whole trimmed string if it looks like a JSON object
+            var trimmed = str.trim();
+            if (trimmed.length > 1 && trimmed.charAt(0) === '{' && trimmed.charAt(trimmed.length - 1) === '}') {
+                try {
+                    var fastRes = JSON.parse(trimmed);
+                    // Return indices relative to original string
+                    var startIdx = str.indexOf(trimmed);
+                    return [fastRes, startIdx, startIdx + trimmed.length];
+                } catch (e) {
+                    // Fall through to robust search
+                    lastError = (e && e.message) ? e.message : e;
+                }
+            }
+
+            // Precompute positions of opening and closing braces
+            var opens = [];
+            var closes = [];
+            for (var i = 0; i < str.length; i++) {
+                var ch = str.charAt(i);
+                if (ch === '{') opens.push(i);
+                else if (ch === '}') closes.push(i);
+            }
+            if (opens.length === 0 || closes.length === 0) {
+                return null;
+            }
+
+            // Helper: quick brace-balance heuristic on slice to skip obviously invalid spans
+            function isPossiblyBalanced(start, end) {
+                var bal = 0;
+                for (var j = start; j <= end; j++) {
+                    var c = str.charAt(j);
+                    if (c === '{') bal++;
+                    else if (c === '}') {
+                        bal--;
+                        if (bal < 0) return false;
+                    }
+                }
+                return bal >= 0; // allow extra opens; JSON.parse will be final arbiter
+            }
+
+            // Try pairs: for each open from left, try closes from right
+            for (var oi = 0; oi < opens.length; oi++) {
+                var start = opens[oi];
+                for (var ci = closes.length - 1; ci >= 0; ci--) {
+                    var end = closes[ci];
+                    if (end <= start) break;
+                    if (!isPossiblyBalanced(start, end)) continue;
+                    var candidate = str.substring(start, end + 1);
+                    try {
+                        var res = JSON.parse(candidate);
+                        return [res, start, end + 1];
+                    } catch (e) {
+                        attempts++;
+                        lastError = (e && e.message) ? e.message : e;
+                        if (attempts >= MAX_ATTEMPTS) {
+                            if (LOG_ENABLED) {
+                                writeLog('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts (cap). Last error: ' + lastError);
+                            }
+                            return null;
+                        }
+                    }
+                }
+            }
+
+            if (attempts > 0 && LOG_ENABLED) {
+                writeLog('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts. Last error: ' + lastError);
+            }
+            return null;
+        }
+
         /**
          * Shows a modal message dialog in Azure DevOps.
          * @param {string} message Message text to display.
          */
-        function ShowDialog(message) {
+        function showDialog(message) {
 
             var dialogOptions = {
                 title: "Create Child Tasks",
@@ -822,15 +826,6 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                         //
                     });
             });
-        }
-
-        /**
-         * Writes a namespaced log message when perf logging is enabled.
-         * @param {string} msg Message to log.
-         */
-        function WriteLog(msg) {
-            if (!LOG_ENABLED) return;
-            console.log('Create Child Tasks: ' + msg);
         }
 
         /**
@@ -852,7 +847,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             create: function (context) {
                 loadEnvLoggingFlag();
                 INIT_TS = Date.now();
-                WriteLog('init');
+                writeLog('init');
                 logSinceInit('Init started');
 
                 ctx = VSS.getWebContext();
@@ -863,7 +858,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                             if (response == true) {
                                 //form is open
                                 logSinceInit('Form detected');
-                                AddTasksOnForm(service);
+                                addTasksOnForm(service);
                             }
                             else {
                                 // on grid
@@ -871,13 +866,13 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
 
                                     logSinceInit('Grid detected: ' + context.workItemIds.length + ' ids');
                                     context.workItemIds.forEach(function (workItemId) {
-                                        AddTasksOnGrid(workItemId);
+                                        addTasksOnGrid(workItemId);
                                     });
                                 }
                                 else if (context.id) {
                                     var workItemId = context.id;
                                     logSinceInit('Grid detected: single id');
-                                    AddTasksOnGrid(workItemId);
+                                    addTasksOnGrid(workItemId);
                                 }
                             }
                         });
