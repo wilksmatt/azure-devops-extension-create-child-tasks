@@ -121,8 +121,15 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             // If template has no IterationPath field copies value from parent, check if IterationPath field value is @currentiteration
             if (taskTemplate.fields['System.IterationPath'] == null){
                 workItem.push({ "op": "add", "path": "/fields/System.IterationPath", "value": currentWorkItem['System.IterationPath'] })
-            }else if (taskTemplate.fields['System.IterationPath'].toLowerCase() == '@currentiteration'){
-                workItem.push({ "op": "add", "path": "/fields/System.IterationPath", "value": teamSettings.backlogIteration.name + teamSettings.defaultIteration.path })
+            } else if (taskTemplate.fields['System.IterationPath'].toLowerCase() == '@currentiteration') {
+                // Check that teamSettings.defaultIteration is not null and has a path
+                if (teamSettings && teamSettings.defaultIteration && teamSettings.defaultIteration.path) {
+                    WriteLog('Info: Creating work item (template: ' + getTemplateName(taskTemplate) + ') with team default iteration path.');
+                    workItem.push({ "op": "add", "path": "/fields/System.IterationPath", "value": teamSettings.backlogIteration.name + teamSettings.defaultIteration.path })
+                } else {
+                    WriteLog('Warning: No default or current iteration path defined in team settings for template ' + getTemplateName(taskTemplate) + '. Falling back to parent iteration path.');
+                    workItem.push({ "op": "add", "path": "/fields/System.IterationPath", "value": currentWorkItem['System.IterationPath'] })
+                }
             }
 
             // Check if AssignedTo field value is @me
@@ -146,39 +153,60 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
 
             var newWorkItem = createWorkItemFromTemplate(currentWorkItem, taskTemplate, teamSettings);
 
-            witClient.createWorkItem(newWorkItem, VSS.getWebContext().project.name, taskTemplate.workItemTypeName)
-                .then(function (response) {
-                    //Add relation
+            return witClient.createWorkItem(newWorkItem, VSS.getWebContext().project.name, taskTemplate.workItemTypeName)
+                .then(function (created) {
+                    // Add relation to the parent and then save the parent form
                     if (service != null) {
-                        service.addWorkItemRelations([
-                            {
-                                rel: "System.LinkTypes.Hierarchy-Forward",
-                                url: response.url,
-                            }]);
-                        //Save
-                        service.beginSaveWorkItem(function (response) {
-                            //WriteLog(" Saved");
-                        }, function (error) {
-                            ShowDialog(" Error saving: " + response);
+                        // Wrap addWorkItemRelations to normalize return type (some SDKs don't support .catch)
+                        return Q.Promise(function (resolve, reject) {
+                            try {
+                                var relResult = service.addWorkItemRelations([
+                                    { rel: "System.LinkTypes.Hierarchy-Forward", url: created.url }
+                                ]);
+                                if (relResult && typeof relResult.then === 'function') {
+                                    // Use then(success, error) to support jQuery/Q-style promises
+                                    relResult.then(function () { resolve(); }, function (e) { reject(e); });
+                                } else {
+                                    // Synchronous/no promise
+                                    resolve();
+                                }
+                            } catch (e) {
+                                reject(e);
+                            }
+                        }).then(function () {
+                            // Prefer save() which returns a promise to avoid race conditions on first run
+                            if (typeof service.save === 'function') {
+                                return service.save();
+                            }
+                            // Fallback to beginSaveWorkItem if save() is not available
+                            return Q.Promise(function (resolve, reject) {
+                                try {
+                                    service.beginSaveWorkItem(function () { resolve(); }, function (error) { reject(error); });
+                                } catch (e) { reject(e); }
+                            });
+                        }, function (err) {
+                            var msg = (err && (err.message || err.statusText)) ? (err.message || err.statusText) : (typeof err === 'string' ? err : JSON.stringify(err));
+                            WriteLog('Failed to add relation for template ' + getTemplateName(taskTemplate) + ': ' + msg);
+                            // Re-throw to be handled by upstream catch
+                            throw err;
                         });
                     } else {
-                        //save using RestClient
-                        var workItemId = currentWorkItem['System.Id']
+                        // Save using REST client by updating relations on the parent work item
+                        var workItemId = currentWorkItem['System.Id'];
                         var document = [{
                             op: "add",
                             path: '/relations/-',
                             value: {
                                 rel: "System.LinkTypes.Hierarchy-Forward",
-                                url: response.url,
+                                url: created.url,
                                 attributes: {
                                     isLocked: false,
                                 }
                             }
                         }];
 
-                        witClient.updateWorkItem(document, workItemId)
-                            .then(function (response) {
-                                var a = response;
+                        return witClient.updateWorkItem(document, workItemId)
+                            .then(function () {
                                 VSS.getService(VSS.ServiceIds.Navigation).then(function (navigationService) {
                                     navigationService.reload();
                                 });
@@ -247,14 +275,24 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
 
         function createChildFromTemplate(witClient, service, currentWorkItem, template, teamSettings) {
             return function () {
-                return getTemplate(template.id).then(function (taskTemplate) {
-                    // Create child
-                    if (IsValidTemplateWIT(currentWorkItem, taskTemplate)) {
-                        if (IsValidTemplateTitle(currentWorkItem, taskTemplate)) {
-                            createWorkItem(service, currentWorkItem, taskTemplate, teamSettings)
+                return getTemplate(template.id)
+                    .then(function (taskTemplate) {
+                        // Create child when filters match
+                        if (IsValidTemplateWIT(currentWorkItem, taskTemplate) && IsValidTemplateTitle(currentWorkItem, taskTemplate)) {
+                            // Return the promise so the chain waits and errors are handled upstream
+                            return createWorkItem(service, currentWorkItem, taskTemplate, teamSettings);
                         }
-                    }
-                });
+                        // No-op: maintain chain with a resolved promise
+                        return Q.when();
+                    })
+                    .catch(function (err) {
+                        // Swallow to avoid noisy unhandled rejections in console; log for diagnostics
+                        var msg = (err && (err.message || err.statusText)) ? (err.message || err.statusText) : (typeof err === 'string' ? err : JSON.stringify(err));
+                        var tName = (template && template.name) ? ('"' + template.name + '"') : 'unknown';
+                        var tId = (template && template.id) ? template.id : 'n/a';
+                        WriteLog('Failed to create child from template ' + tName + ' (id: ' + tId + '): ' + msg);
+                        return Q.when();
+                    });
             };
         }
 
@@ -268,15 +306,19 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
          */
         function IsValidTemplateWIT(currentWorkItem, taskTemplate) {
 
-            // Get the JSON information from the child work item template description
-            var jsonFilters = extractJSON(taskTemplate.description)[0];
+            // Try to extract a JSON object from the template description
+            var extracted = extractJSON(
+                taskTemplate.description,
+                getTemplateName(taskTemplate)
+            );
+            var jsonFilters = extracted && extracted[0];
 
-            // Check whether the JSON string is valid
-            if (IsJsonString(JSON.stringify(jsonFilters))) {
+            // Proceed only if we have an object with an array applywhen
+            if (jsonFilters && typeof jsonFilters === 'object' && Array.isArray(jsonFilters.applywhen)) {
 
                 // Check whether any of the criteria specified in the child work item template JSON matches the current work item
-                var applicableFilter = jsonFilters.applywhen.filter(
-                    function (el) {
+                var someMatch = jsonFilters.applywhen.some(function (el) {
+                    try {
                         return (
                             matchField('System.BoardColumn', currentWorkItem, el) &&
                             matchField('System.BoardLane', currentWorkItem, el) &&
@@ -284,13 +326,17 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                             matchField('System.Tags', currentWorkItem, el) &&
                             matchField('System.Title', currentWorkItem, el) &&
                             matchField('System.AreaPath', currentWorkItem, el) &&
+                            matchField('System.IterationPath', currentWorkItem, el) &&
                             matchField('System.WorkItemType', currentWorkItem, el)
                         );
+                    } catch (e) {
+                        // If a single rule is malformed, skip it instead of throwing
+                        WriteLog('Skipping malformed filter rule: ' + (e && e.message ? e.message : e));
+                        return false;
                     }
-                );
+                });
 
-                // Return 'true' if any of the fields matched
-                return applicableFilter.length > 0;
+                return someMatch;
             } 
             // Check whether the current work item type was specified using the basic square brackets approach in the child work item template description
             else {
@@ -312,29 +358,18 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
         }
 
         function IsValidTemplateTitle(currentWorkItem, taskTemplate) {
-            var jsonFilters = extractJSON(taskTemplate.description)[0];
-            var isJSON = IsJsonString(JSON.stringify(jsonFilters));
-            if (isJSON) {
+            // Title filtering is handled within JSON rules via IsValidTemplateWIT/matchField('System.Title').
+            // For non-JSON descriptions (basic bracket syntax), there is no title filter. Always allow.
+            try {
+                var extracted = extractJSON(
+                    taskTemplate && taskTemplate.description ? taskTemplate.description : "",
+                    getTemplateName(taskTemplate)
+                );
+                var hasJson = extracted && extracted[0] && typeof extracted[0] === 'object';
+                return true; // JSON case handled elsewhere; basic mode has no title filter
+            } catch (e) {
                 return true;
             }
-            var filters = taskTemplate.description.match(/[^{\}]+(?=})/g);
-            var curTitle = currentWorkItem["System.Title"].match(/[^{\}]+(?=})/g);
-            if (filters) {
-                var isValid = false;
-                if (curTitle) {
-                    for (var i = 0; i < filters.length; i++) {
-                        if (curTitle.indexOf(filters[i]) > -1) {
-                            isValid = true;
-                            break;
-                        }
-                    }
-
-                }
-                return isValid;
-            } else {
-                return true;
-            }
-
         }
 
         function findWorkTypeCategory(categories, workItemType) {
@@ -402,26 +437,6 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                 });
         }
 
-        function ShowDialog(message) {
-
-            var dialogOptions = {
-                title: "1-Click Child-Links",
-                width: 300,
-                height: 200,
-                resizable: false,
-            };
-
-            VSS.getService(VSS.ServiceIds.Dialog).then(function (dialogSvc) {
-
-                dialogSvc.openMessageDialog(message, dialogOptions)
-                    .then(function (dialog) {
-                        //
-                    }, function (dialog) {
-                        //
-                    });
-            });
-        }
-
         function SortTemplates(a, b) {
             var nameA = a.name.toLowerCase(), nameB = b.name.toLowerCase();
             if (nameA < nameB) //sort string ascending
@@ -431,39 +446,45 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             return 0; //default return value (no sorting)
         }
 
-        function WriteLog(msg) {
-            console.log('1-Click Child-Links: ' + msg);
-        }
-
-        function extractJSON(str) {
-            var firstOpen, firstClose, candidate;
-            firstOpen = str.indexOf('{', firstOpen + 1);
-            //console.log('firstopen: ', firstOpen);
+        function extractJSON(str, contextLabel) {
+            var firstOpen = -1, firstClose = -1, candidate;
+            var attempts = 0;
+            var lastError = null;
+            firstOpen = str.indexOf('{');
             if (firstOpen != -1) {
                 do {
                     firstClose = str.lastIndexOf('}');
-                    //console.log('firstOpen: ' + firstOpen, 'firstClose: ' + firstClose);
                     if (firstClose <= firstOpen) {
+                        if (attempts > 0) {
+                            WriteLog('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts. Last error: ' + lastError);
+                        }
                         return null;
                     }
                     do {
                         candidate = str.substring(firstOpen, firstClose + 1);
-                        //console.log('candidate: ' + candidate);
                         try {
                             var res = JSON.parse(candidate);
-                            //console.log('...found');
                             return [res, firstOpen, firstClose + 1];
                         }
                         catch (e) {
-                            console.log('...failed');
+                            attempts++;
+                            lastError = (e && e.message) ? e.message : e;
                         }
                         firstClose = str.substr(0, firstClose).lastIndexOf('}');
                     } while (firstClose > firstOpen);
                     firstOpen = str.indexOf('{', firstOpen + 1);
                 } while (firstOpen != -1);
-            } else { return ''; }
+                // Exhausted search without success
+                if (attempts > 0) {
+                    WriteLog('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts. Last error: ' + lastError);
+                }
+                return null;
+            } else {
+                return null;
+            }
         }
 
+        // TODO: Remove if no longer used
         function IsJsonString(str) {
             try {
                 JSON.parse(str);
@@ -473,26 +494,63 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             return true;
         }
 
+        /**
+         * Match a specific field in the current work item against a filter element.
+         * @param {*} fieldName // The name of the field to match
+         * @param {*} currentWorkItem // The current work item being evaluated
+         * @param {*} filterElement // The filter element containing the criteria
+         * @returns 
+         */
         function matchField(fieldName, currentWorkItem, filterElement) {
-            // If the filter criteria value is not defined
-            if(typeof (filterElement[fieldName]) === "undefined"){
+
+            // Get the filter value for the specific field (e.g. System.State)
+            var filterVal = filterElement[fieldName];
+
+            // If no filter provided, always a match
+            if (typeof filterVal === 'undefined' || filterVal === null) {
                 return true;
             }
 
-            // If the title field matches a wildcard string comparison (e.g. "*word*")
-            if(fieldName === "System.Title"){
-                return matchWildcardString(currentWorkItem[fieldName], filterElement[fieldName]);
+            // Get the current value for the specific field (e.g. System.State)
+            var curValRaw = currentWorkItem ? currentWorkItem[fieldName] : undefined;
+
+            // Title: wildcard match, case-insensitive, null-safe
+            if (fieldName === 'System.Title') {
+                var title = (curValRaw == null ? '' : curValRaw.toString());
+                var rule = (filterVal == null ? '' : filterVal.toString());
+                return matchWildcardString(title, rule);
             }
 
-            // If the filter criteria is not an array
-            if(!Array.isArray(filterElement[fieldName].toLowerCase()) && filterElement[fieldName].toLowerCase() === currentWorkItem[fieldName].toLowerCase()){
-                return true;
+            // Tags: normalize to arrays and check that current contains all filter tags
+            if (fieldName === 'System.Tags') {
+                var toTagArray = function (val) {
+                    if (Array.isArray(val)) return val;
+                    if (val == null) return [];
+                    // Azure DevOps uses semicolon-separated tags; accept commas/newlines too
+                    return val
+                        .toString()
+                        .split(/[;\,\n]/)
+                        .map(function (s) { return s.trim(); })
+                        .filter(function (s) { return s; });
+                };
+
+                var currentTags = toTagArray(curValRaw).map(function (s) { return s.toLowerCase(); });
+                var filterTags = toTagArray(filterVal).map(function (s) { return s.toLowerCase(); });
+
+                return filterTags.every(function (tag) { return currentTags.indexOf(tag) !== -1; });
             }
-            
-            // If the filter criteria is an array
-            if(Array.isArray(filterElement[fieldName].toLowerCase()) && arraysEqual(filterElement[fieldName], currentWorkItem[fieldName])){
-                return true;
+
+            // For non-tag fields: if filter provides an array, treat as any-of values (case-insensitive)
+            if (Array.isArray(filterVal)) {
+                var curStr = (curValRaw == null ? '' : curValRaw.toString().toLowerCase());
+                return filterVal.some(function (v) {
+                    return (v == null ? '' : v.toString().toLowerCase()) === curStr;
+                });
             }
+
+            // Scalar compare (case-insensitive). If current value is missing, not a match
+            if (curValRaw == null) return false;
+            return filterVal.toString().toLowerCase() === curValRaw.toString().toLowerCase();
         }
 
         /**
@@ -507,8 +565,11 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
          * @param {*} rule 
          */
         function matchWildcardString(str, rule) {
-            var escapeRegex = (str) => str.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1");
-            return new RegExp("^" + rule.split("*").map(escapeRegex).join(".*") + "$").test(str);
+            // Coerce to strings and do case-insensitive match with safe escaping
+            var s = (str == null ? '' : String(str));
+            var r = (rule == null ? '' : String(rule));
+            var escapeRegex = function (x) { return x.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1"); };
+            return new RegExp("^" + r.split("*").map(escapeRegex).join(".*") + "$", "i").test(s);
         }
 
         /**
@@ -530,6 +591,40 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                 if (a[i] !== b[i]) return false;
             }
             return true;
+        }
+
+        function ShowDialog(message) {
+
+            var dialogOptions = {
+                title: "Create Child Tasks",
+                width: 300,
+                height: 200,
+                resizable: false,
+            };
+
+            VSS.getService(VSS.ServiceIds.Dialog).then(function (dialogSvc) {
+
+                dialogSvc.openMessageDialog(message, dialogOptions)
+                    .then(function (dialog) {
+                        //
+                    }, function (dialog) {
+                        //
+                    });
+            });
+        }
+
+        function WriteLog(msg) {
+            console.log('Create Child Tasks: ' + msg);
+        }
+
+        // Returns a safe template name string for logging
+        function getTemplateName(taskTemplate) {
+            try {
+                var name = (taskTemplate && taskTemplate.name) ? taskTemplate.name : 'unknown';
+                return name;
+            } catch (e) {
+                return 'unknown';
+            }
         }
 
         return {
