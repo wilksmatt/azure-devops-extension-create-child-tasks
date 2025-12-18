@@ -71,11 +71,7 @@
             "addressable": true
         },
         {
-            "path": "scripts/app.js",
-            "addressable": true
-        },
-        {
-            "path": "lib/VSS.SDK.min.js",
+            "path": "dist",
             "addressable": true
         }
     ],

@@ -1,24 +1,32 @@
 {
-  "devDependencies": {
-    "dotenv": "^17.2.3",
-    "grunt": "~1.0.1",
-    "grunt-cli": "^1.2.0",
-    "grunt-contrib-clean": "^1.0.0",
-    "grunt-contrib-copy": "~1.0.0",
-    "grunt-exec": "~0.4.7",
-    "requirejs": "^2.2.0",
-    "tfx-cli": "^0.3.26",
-    "vss-web-extension-sdk": "^1.104.0",
-    "webpack": "^5.102.1",
-    "webpack-cli": "^4.10.0",
-    "webpack-dev-server": "^4.15.1"
-  },
   "name": "create-child-tasks-test",
   "private": false,
   "version": "0.3.1",
+  "engines": {
+    "node": ">=20.19.0",
+    "npm": ">=11.7.0"
+  },
   "scripts": {
     "build:dev": "webpack --config webpack.config.js --mode development",
     "build:prod": "webpack --config webpack.config.js --mode production",
     "serve": "webpack serve --config webpack.config.js --mode development"
+  },
+  "dependencies": {
+    "azure-devops-extension-api": "^4.264.0",
+    "azure-devops-extension-sdk": "^4.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.1",
+    "dotenv": "^17.2.3",
+    "grunt": "~1.0.1",
+    "grunt-cli": "^1.2.0",
+    "grunt-contrib-clean": "^1.0.0",
+    "grunt-exec": "~0.4.7",
+    "tfx-cli": "^0.3.26",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.6.2",
+    "webpack": "^5.102.1",
+    "webpack-cli": "^4.10.0",
+    "webpack-dev-server": "^4.15.1"
   }
 }

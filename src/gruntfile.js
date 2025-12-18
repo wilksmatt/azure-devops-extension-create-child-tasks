@@ -3,10 +3,16 @@
     require('dotenv').config(); // Loads PAT from .env if it exists
     const fs = require('fs'); // For saving token to .env
     const readline = require('readline'); // For interactive input
+    const { exec } = require('child_process');
 
     // Project configuration.
     grunt.initConfig({
         exec: {
+            build_prod: {
+                command: "npm run build:prod",
+                stdout: true,
+                stderr: true
+            },
             package_dev: {
                 command: "tfx extension create  --manifests vss-extension.json --overrides-file configs/dev.json --output-path ../dist",
                 stdout: true,
@@ -23,40 +29,41 @@
                 stderr: true
             }
         },
-        copy: {
-            scripts: {
-                files: [{
-                    expand: true, 
-                    flatten: true, 
-                    src: ["node_modules/vss-web-extension-sdk/lib/VSS.SDK.min.js"], 
-                    dest: "lib",
-                    filter: "isFile" 
-                }]
-            }
-        },
-
         clean: ["../dist/*.vsix"],
 
     });
     
     // Load the plugin that provides the "uglify" task
     grunt.loadNpmTasks("grunt-exec");
-    grunt.loadNpmTasks("grunt-contrib-copy");
     grunt.loadNpmTasks('grunt-contrib-clean');
 
     // Default task(s)
-    grunt.registerTask("package-dev", ["exec:package_dev"]);
-    grunt.registerTask("package-release", ["exec:package_release"]);
-    grunt.registerTask("package-release-test", ["exec:package_release_test"]);
+    grunt.registerTask("package-dev", ["exec:build_prod", "exec:package_dev"]);
+    grunt.registerTask("package-release", ["exec:build_prod", "exec:package_release"]);
+    grunt.registerTask("package-release-test", ["exec:build_prod", "exec:package_release_test"]);
 
     // Custom publish task with interactive PAT input if not set in env
     grunt.registerTask('publish-dev', 'Publish Azure DevOps extension', function () {
         const done = this.async();
-        const exec = require('child_process').exec;
 
-        // Helper to run the command
-        const runPublish = (token) => {
-            const cmd = [
+        const runCommand = (cmd, startMessage) => new Promise((resolve, reject) => {
+            if (startMessage) {
+                grunt.log.writeln(startMessage);
+            }
+            exec(cmd, (err, stdout, stderr) => {
+                if (err) {
+                    grunt.log.error(stderr || err);
+                    return reject(err);
+                }
+                if (stdout) {
+                    grunt.log.ok(stdout);
+                }
+                resolve();
+            });
+        });
+
+        const buildAndPublish = (token) => {
+            const publishCmd = [
                 'tfx extension publish',
                 '--service-url https://marketplace.visualstudio.com',
                 '--manifests vss-extension.json',
@@ -65,23 +72,17 @@
                 `--token ${token}`
             ].join(' ');
 
-            grunt.log.writeln('🚀 Publishing extension...');
-            exec(cmd, (err, stdout, stderr) => {
-                if (err) {
-                    grunt.log.error(stderr || err);
-                    done(false);
-                } else {
-                    grunt.log.ok(stdout);
-                    done();
-                }
-            });
+            runCommand('npm run build:prod', '🛠️ Building extension bundle...')
+                .then(() => runCommand(publishCmd, '🚀 Publishing extension...'))
+                .then(() => done())
+                .catch(() => done(false));
         };
 
         // Check for existing token
         let token = process.env.TFS_PERSONAL_ACCESS_TOKEN;
 
         if (token) {
-            runPublish(token);
+            buildAndPublish(token);
             return;
         }
 
@@ -113,7 +114,7 @@
                     grunt.log.ok('Token saved to .env.');
                 }
                 saveEnv.close();
-                runPublish(token);
+                buildAndPublish(token);
             });
         });
     });

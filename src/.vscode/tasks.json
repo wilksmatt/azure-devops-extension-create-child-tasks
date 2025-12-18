@@ -1,0 +1,11 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Rebuild dev bundle",
+			"type": "shell",
+			"command": "npm run build:dev",
+			"group": "build"
+		}
+	]
+}
