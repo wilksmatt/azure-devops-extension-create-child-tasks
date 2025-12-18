@@ -303,8 +303,6 @@ async function addTasks(
     return;
   }
 
-  WriteLog("Resolved child types: " + childTypes.join(", "));
-
   const templates = await getTemplates(childTypes);
   WriteLog("Template count: " + templates.length);
   if (!templates.length) {
@@ -949,46 +947,50 @@ function getProjectIds(): { id: string; name: string } {
 
 async function fetchWorkItemTypeCategoriesViaRest(): Promise<WorkItemTypeCategory[]> {
   const base = getCollectionUri();
-  const { id, name } = getProjectIds();
-  const candidates = [
-    base + encodeURIComponent(id) + "/_apis/wit/workitemtypecategories?api-version=7.1-preview.2",
-    base + encodeURIComponent(name) + "/_apis/wit/workitemtypecategories?api-version=7.1-preview.2",
-  ];
-  let lastError: any = null;
-  for (const url of candidates) {
-    WriteLog("Fetching categories via REST fallback: " + url);
+  const { id } = getProjectIds();
+  const url = base + encodeURIComponent(id) + "/_apis/wit/workitemtypecategories?api-version=7.1";
+  WriteLog("Fetching categories via REST: " + url);
+  try {
+    const payload = await adoFetch<any>(url);
+    const items = Array.isArray(payload) ? payload : payload?.value || [];
+    const categories = items.map(normalizeCategoryPayload);
     try {
-      const payload = await adoFetch<any>(url);
-      const items = Array.isArray(payload) ? payload : payload?.value || [];
-      return items.map(normalizeCategoryPayload);
-    } catch (err) {
-      lastError = err;
-      WriteLog("Category list attempt failed: " + formatError(err));
-    }
+      WriteLog(
+        "Categories fetched (" +
+          categories.length +
+          "): " +
+          categories
+            .map((c) => c.name || c.referenceName || "unknown")
+            .join(", ")
+      );
+    } catch {}
+    return categories;
+  } catch (err) {
+    WriteLog("Category list REST failed: " + formatError(err));
+    throw err;
   }
-  throw lastError || new Error("All category list REST attempts failed");
 }
 
 async function fetchWorkItemTypeCategoryViaRest(referenceName: string): Promise<WorkItemTypeCategory> {
   const base = getCollectionUri();
-  const { id, name } = getProjectIds();
+  const { id } = getProjectIds();
   const ref = encodeURIComponent(referenceName);
-  const candidates = [
-    base + encodeURIComponent(id) + "/_apis/wit/workitemtypecategories/" + ref + "?api-version=7.1-preview.2",
-    base + encodeURIComponent(name) + "/_apis/wit/workitemtypecategories/" + ref + "?api-version=7.1-preview.2",
-  ];
-  let lastError: any = null;
-  for (const url of candidates) {
-    WriteLog("Fetching category via REST fallback: " + url);
+  const url = base + encodeURIComponent(id) + "/_apis/wit/workitemtypecategories/" + ref + "?api-version=7.1";
+  WriteLog("Fetching category via REST: " + url);
+  try {
+    const payload = await adoFetch<any>(url);
+    const normalized = normalizeCategoryPayload(payload);
     try {
-      const payload = await adoFetch<any>(url);
-      return normalizeCategoryPayload(payload);
-    } catch (err) {
-      lastError = err;
-      WriteLog("Category detail attempt failed: " + formatError(err));
-    }
+      WriteLog(
+        "Category fetched: " +
+          (normalized.name || normalized.referenceName || referenceName)
+      );
+    } catch {}
+    return normalized;
+  } catch (err) {
+    WriteLog("Category detail REST failed: " + formatError(err));
+    throw err;
   }
-  throw lastError || new Error("All category detail REST attempts failed");
 }
 
 function normalizeCategoryPayload(payload: any): WorkItemTypeCategory {
@@ -1530,36 +1532,39 @@ async function getChildTypes(
     WriteLog(
       "Categories REST fetch failed: " +
         formatError(restError) +
-        "; attempting client call as fallback"
+        "; no client fallback (REST-only)."
     );
-    try {
-      categories = await withTimeout(
-        witClient!.getWorkItemTypeCategories(webContext!.project.name!),
-        "getWorkItemTypeCategories"
-      );
-    } catch (error) {
-      WriteLog("Categories via client also failed or timed out: " + formatError(error));
-      throw error;
-    }
+    return null;
   }
   const category = findWorkTypeCategory(categories, workItemType);
   if (!category) {
+    WriteLog("No work item type category found for " + workItemType);
     return null;
   }
+  try {
+    WriteLog(
+      "Found work item type category for " +
+        workItemType +
+        ": " +
+        (category.name || category.referenceName || "unknown") +
+        " (" +
+        (category.referenceName || "unknown") +
+        "); types: " +
+        (category.workItemTypes || [])
+          .map((t) => t.name || "unknown")
+          .join(", ")
+    );
+  } catch {}
 
-  const projectName = webContext!.project.name!;
   const bugMode = bugsBehavior ?? BugsBehavior.Off;
 
   if (category.referenceName === "Microsoft.EpicCategory") {
     let featureCategory: WorkItemTypeCategory;
     try {
-      featureCategory = await withTimeout(
-        witClient!.getWorkItemTypeCategory(projectName, "Microsoft.FeatureCategory"),
-        "getWorkItemTypeCategory(Feature)"
-      );
-    } catch (error) {
-      WriteLog("Feature category via client failed or timed out: " + formatError(error) + "; using REST fallback");
       featureCategory = await fetchWorkItemTypeCategoryViaRest("Microsoft.FeatureCategory");
+    } catch (error) {
+      WriteLog("Feature category REST fetch failed: " + formatError(error));
+      return null;
     }
     return featureCategory.workItemTypes.map((item) => item.name);
   }
@@ -1567,49 +1572,19 @@ async function getChildTypes(
   const requests: Promise<WorkItemTypeCategory>[] = [];
 
   if (category.referenceName === "Microsoft.FeatureCategory") {
-    requests.push(
-      withTimeout(
-        witClient!.getWorkItemTypeCategory(projectName, "Microsoft.RequirementCategory"),
-        "getWorkItemTypeCategory(Requirement)"
-      ).catch(() => fetchWorkItemTypeCategoryViaRest("Microsoft.RequirementCategory"))
-    );
+    requests.push(fetchWorkItemTypeCategoryViaRest("Microsoft.RequirementCategory"));
     if (bugMode === BugsBehavior.AsRequirements) {
-      requests.push(
-        withTimeout(
-          witClient!.getWorkItemTypeCategory(projectName, "Microsoft.BugCategory"),
-          "getWorkItemTypeCategory(Bug)"
-        ).catch(() => fetchWorkItemTypeCategoryViaRest("Microsoft.BugCategory"))
-      );
+      requests.push(fetchWorkItemTypeCategoryViaRest("Microsoft.BugCategory"));
     }
   } else if (category.referenceName === "Microsoft.RequirementCategory") {
-    requests.push(
-      withTimeout(
-        witClient!.getWorkItemTypeCategory(projectName, "Microsoft.TaskCategory"),
-        "getWorkItemTypeCategory(Task)"
-      ).catch(() => fetchWorkItemTypeCategoryViaRest("Microsoft.TaskCategory"))
-    );
+    requests.push(fetchWorkItemTypeCategoryViaRest("Microsoft.TaskCategory"));
     if (bugMode === BugsBehavior.AsTasks) {
-      requests.push(
-        withTimeout(
-          witClient!.getWorkItemTypeCategory(projectName, "Microsoft.BugCategory"),
-          "getWorkItemTypeCategory(Bug)"
-        ).catch(() => fetchWorkItemTypeCategoryViaRest("Microsoft.BugCategory"))
-      );
+      requests.push(fetchWorkItemTypeCategoryViaRest("Microsoft.BugCategory"));
     }
   } else if (category.referenceName === "Microsoft.TaskCategory") {
-    requests.push(
-      withTimeout(
-        witClient!.getWorkItemTypeCategory(projectName, "Microsoft.TaskCategory"),
-        "getWorkItemTypeCategory(Task)"
-      ).catch(() => fetchWorkItemTypeCategoryViaRest("Microsoft.TaskCategory"))
-    );
+    requests.push(fetchWorkItemTypeCategoryViaRest("Microsoft.TaskCategory"));
   } else if (category.referenceName === "Microsoft.BugCategory") {
-    requests.push(
-      withTimeout(
-        witClient!.getWorkItemTypeCategory(projectName, "Microsoft.TaskCategory"),
-        "getWorkItemTypeCategory(Task)"
-      ).catch(() => fetchWorkItemTypeCategoryViaRest("Microsoft.TaskCategory"))
-    );
+    requests.push(fetchWorkItemTypeCategoryViaRest("Microsoft.TaskCategory"));
   }
 
   if (!requests.length) {
@@ -1618,6 +1593,7 @@ async function getChildTypes(
   }
 
   const responses = await Promise.all(requests);
+
   const result: string[] = [];
   responses.forEach((cat) => {
     cat.workItemTypes.forEach((type) => result.push(type.name));
