@@ -1043,55 +1043,25 @@ async function fetchTemplatesViaRest(
 
 async function fetchTemplateViaRest(id: string): Promise<WorkItemTemplate> {
   const base = getCollectionUri();
-  const { id: projectId, name: projectName } = getProjectIds();
+  const { id: projectId } = getProjectIds();
   const teamId = webContext!.team.id;
-  const teamName = webContext!.team.name;
   const templateId = encodeURIComponent(id);
-  const candidates = [
-    // Canonical path-segment route per docs
+  const url =
     base +
-      encodeURIComponent(projectId) +
-      "/" +
-      encodeURIComponent(teamId) +
-      "/_apis/wit/templates/" +
-      templateId +
-      "?api-version=7.1",
-    // Name-based variant
-    base +
-      encodeURIComponent(projectName) +
-      "/" +
-      encodeURIComponent(teamName) +
-      "/_apis/wit/templates/" +
-      templateId +
-      "?api-version=7.1",
-    // Mixed variants for hosts that accept name/id combos
-    base +
-      encodeURIComponent(projectId) +
-      "/" +
-      encodeURIComponent(teamName) +
-      "/_apis/wit/templates/" +
-      templateId +
-      "?api-version=7.1",
-    base +
-      encodeURIComponent(projectName) +
-      "/" +
-      encodeURIComponent(teamId) +
-      "/_apis/wit/templates/" +
-      templateId +
-      "?api-version=7.1",
-  ];
-  let lastError: any = null;
-  for (const url of candidates) {
-    WriteLog("Fetching template detail via REST fallback: " + url);
-    try {
-      const payload = await adoFetch<any>(url);
-      return (payload as unknown) as WorkItemTemplate;
-    } catch (err) {
-      lastError = err;
-      WriteLog("Template detail attempt failed: " + formatError(err));
-    }
+    encodeURIComponent(projectId) +
+    "/" +
+    encodeURIComponent(teamId) +
+    "/_apis/wit/templates/" +
+    templateId +
+    "?api-version=7.1";
+  WriteLog("Fetching template detail via REST: " + url);
+  try {
+    const payload = await adoFetch<any>(url);
+    return (payload as unknown) as WorkItemTemplate;
+  } catch (err) {
+    WriteLog("Template detail REST failed: " + formatError(err));
+    throw err;
   }
-  throw lastError || new Error("All template detail REST attempts failed");
 }
 
 async function restCreateWorkItem(
