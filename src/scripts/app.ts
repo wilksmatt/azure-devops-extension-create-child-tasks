@@ -1007,61 +1007,27 @@ async function fetchTemplatesViaRest(
   workItemTypes: string[]
 ): Promise<WorkItemTemplateReference[]> {
   const base = getCollectionUri();
-  const { id, name } = getProjectIds();
+  const { id } = getProjectIds();
   const teamId = webContext!.team.id;
-  const teamName = webContext!.team.name;
   const templates: WorkItemTemplateReference[] = [];
   for (const type of workItemTypes) {
     const typeEnc = encodeURIComponent(type);
-    const byPathSegments = [
-      // projectId + teamId
+    const url =
       base +
-        encodeURIComponent(id) +
-        "/" +
-        encodeURIComponent(teamId) +
-        "/_apis/wit/templates?workitemtypename=" +
-        typeEnc +
-        "&api-version=7.1",
-      // projectName + teamName
-      base +
-        encodeURIComponent(name) +
-        "/" +
-        encodeURIComponent(teamName) +
-        "/_apis/wit/templates?workitemtypename=" +
-        typeEnc +
-        "&api-version=7.1",
-      // projectId + teamName
-      base +
-        encodeURIComponent(id) +
-        "/" +
-        encodeURIComponent(teamName) +
-        "/_apis/wit/templates?workitemtypename=" +
-        typeEnc +
-        "&api-version=7.1",
-      // projectName + teamId
-      base +
-        encodeURIComponent(name) +
-        "/" +
-        encodeURIComponent(teamId) +
-        "/_apis/wit/templates?workitemtypename=" +
-        typeEnc +
-        "&api-version=7.1",
-    ];
-    let lastError: any = null;
-    let list: any[] | null = null;
-    for (const url of byPathSegments) {
-      WriteLog("Fetching templates via REST: " + url);
-      try {
-        const payload = await adoFetch<any>(url);
-        list = Array.isArray(payload) ? payload : payload?.value || [];
-        break;
-      } catch (err) {
-        lastError = err;
-        WriteLog("Templates list attempt failed: " + formatError(err));
-      }
-    }
-    if (!list) {
-      throw lastError || new Error("All template list REST attempts failed for type " + type);
+      encodeURIComponent(id) +
+      "/" +
+      encodeURIComponent(teamId) +
+      "/_apis/wit/templates?workitemtypename=" +
+      typeEnc +
+      "&api-version=7.1";
+    WriteLog("Fetching templates via REST: " + url);
+    let list: any[] = [];
+    try {
+      const payload = await adoFetch<any>(url);
+      list = Array.isArray(payload) ? payload : payload?.value || [];
+    } catch (err) {
+      WriteLog("Templates list REST failed for type " + type + ": " + formatError(err));
+      throw err;
     }
     list.forEach((item: any) => {
       templates.push({
