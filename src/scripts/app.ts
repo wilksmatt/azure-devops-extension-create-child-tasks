@@ -36,8 +36,6 @@ type JsonPatch = {
 };
 
 const CLIENT_TIMEOUT_MS = 8000;
-// Temporary: simple creation path for troubleshooting
-const SIMPLE_MODE = false;
 
 SDK.init({ applyTheme: true });
 WriteLog("Toolbar bundle loaded; waiting for SDK context.");
@@ -70,16 +68,16 @@ function ensureInitialized(): Promise<void> {
         if (cid) {
           WriteLog("Contribution id: " + cid);
         }
-      } catch {}
+      } catch { }
       await logNetworkDiagnostics();
       if (webContext) {
         WriteLog(
           "Web context: project=" +
-            (webContext.project?.name || 'unknown') +
-            ", team=" +
-            (webContext.team?.name || 'none') +
-            ", user=" +
-            (currentUser?.displayName || currentUser?.name || 'unknown')
+          (webContext.project?.name || 'unknown') +
+          ", team=" +
+          (webContext.team?.name || 'none') +
+          ", user=" +
+          (currentUser?.displayName || currentUser?.name || 'unknown')
         );
         await resolveTeamContext();
       }
@@ -147,10 +145,10 @@ async function resolveTeamContext(): Promise<void> {
     cachedTeamContext = baseContext;
     WriteLog(
       "Using team context from webContext: " +
-        baseContext.team +
-        " (" +
-        baseContext.teamId +
-        ")"
+      baseContext.team +
+      " (" +
+      baseContext.teamId +
+      ")"
     );
     return;
   }
@@ -174,10 +172,10 @@ async function resolveTeamContext(): Promise<void> {
     };
     WriteLog(
       "Resolved default team context: " +
-        defaultTeam.name +
-        " (" +
-        defaultTeam.id +
-        ")"
+      defaultTeam.name +
+      " (" +
+      defaultTeam.id +
+      ")"
     );
   } catch (error) {
     const err = formatError(error);
@@ -189,7 +187,7 @@ async function resolveTeamContext(): Promise<void> {
 async function run(context: ActionContext): Promise<void> {
   WriteLog(
     "Toolbar command invoked with context: " +
-      JSON.stringify(context ?? {}, null, 2)
+    JSON.stringify(context ?? {}, null, 2)
   );
   primeCollectionUriFromContext(context);
   try {
@@ -217,8 +215,8 @@ async function create(context: ActionContext): Promise<void> {
   const ids = (context && context.workItemIds && context.workItemIds.length)
     ? context.workItemIds
     : context && context.id
-    ? [context.id]
-    : [];
+      ? [context.id]
+      : [];
 
   WriteLog("Grid context work item ids: " + JSON.stringify(ids));
 
@@ -250,8 +248,8 @@ async function addTasks(
 ): Promise<void> {
   WriteLog(
     "Preparing to add tasks for work item " +
-      workItemId +
-      (service ? " (form)" : " (grid)")
+    workItemId +
+    (service ? " (form)" : " (grid)")
   );
   if (!webContext || !witClient || !workClient) {
     WriteLog("Clients/context missing; triggering ensureInitialized().");
@@ -265,11 +263,7 @@ async function addTasks(
     "System.Id": workItemId,
   };
 
-  if (SIMPLE_MODE) {
-    WriteLog("Simple mode enabled: creating a single Task via REST.");
-    await createSingleTestTask(service, currentWorkItem);
-    return;
-  }
+  // Simple Mode removed: always use full template flow
 
   const workItemType = currentWorkItem["System.WorkItemType"];
   if (!workItemType) {
@@ -288,7 +282,7 @@ async function addTasks(
     } catch (e) {
       WriteLog(
         "Team settings unavailable; proceeding with default bugsBehavior=Off: " +
-          formatError(e)
+        formatError(e)
       );
       teamSettings = { bugsBehavior: BugsBehavior.Off } as unknown as TeamSetting;
     }
@@ -325,64 +319,7 @@ async function addTasks(
   }
 }
 
-async function createSingleTestTask(
-  service: IWorkItemFormService | null,
-  currentWorkItem: WorkItemFields
-): Promise<void> {
-  const parentId = currentWorkItem["System.Id"];
-  const parentTitle = currentWorkItem["System.Title"] || "Parent";
-  const areaPath = currentWorkItem["System.AreaPath"];
-  const iterationPath = currentWorkItem["System.IterationPath"];
-
-  const patch: JsonPatch[] = [
-    {
-      op: "add",
-      path: "/fields/System.Title",
-      value: parentTitle + " - Test Task",
-    },
-  ];
-  if (areaPath) {
-    patch.push({ op: "add", path: "/fields/System.AreaPath", value: areaPath });
-  }
-  if (iterationPath) {
-    patch.push({ op: "add", path: "/fields/System.IterationPath", value: iterationPath });
-  }
-
-  WriteLog("Creating single test Task");
-  const created = await restCreateWorkItem("Task", patch);
-  WriteLog("Test Task created with id=" + created.id + ", url=" + created.url);
-
-  if (service && created.url) {
-    await service.addWorkItemRelations([
-      { rel: "System.LinkTypes.Hierarchy-Forward", url: created.url, attributes: { isLocked: false } },
-    ]);
-    if (typeof service.save === "function") {
-      await service.save();
-    }
-    WriteLog("Linked new child " + created.id + " to parent via form service.");
-    return;
-  }
-
-  if (created.url) {
-    const doc: JsonPatch[] = [
-      {
-        op: "add",
-        path: "/relations/-",
-        value: {
-          rel: "System.LinkTypes.Hierarchy-Forward",
-          url: created.url,
-          attributes: { isLocked: false },
-        },
-      },
-    ];
-    await restUpdateWorkItemLinks(parentId, doc);
-    const navigationService = await SDK.getService<IHostNavigationService>(
-      CommonServiceIds.HostNavigationService
-    );
-    await navigationService.reload();
-    WriteLog("Grid scenario: parent work item updated and page reloaded.");
-  }
-}
+// Simple Mode test-creation helper removed
 
 async function getWorkItemData(workItemId: number): Promise<any> {
   if (!witClient) {
@@ -397,8 +334,8 @@ async function getWorkItemData(workItemId: number): Promise<any> {
   } catch (restError) {
     WriteLog(
       "REST work item fetch failed: " +
-        formatError(restError) +
-        "; attempting client call as fallback"
+      formatError(restError) +
+      "; attempting client call as fallback"
     );
   }
   try {
@@ -426,35 +363,35 @@ async function getTeamSettingsData(teamContext: TeamContext): Promise<TeamSettin
   try {
     WriteLog(
       "Fetching team settings via REST (preferred) for team " +
-        (teamContext.teamId || teamContext.team)
+      (teamContext.teamId || teamContext.team)
     );
     // First try backlog configuration (more widely available) to derive bugsBehavior
     try {
       const derived = await fetchBacklogConfigurationViaRest(teamContext);
       WriteLog(
         "Backlog configuration fetched; derived bugsBehavior=" +
-          (derived as any)?.bugsBehavior
+        (derived as any)?.bugsBehavior
       );
       return derived;
     } catch (bcErr) {
       WriteLog(
         "Backlog configuration fetch failed: " +
-          formatError(bcErr) +
-          "; falling back to teamsettings routes"
+        formatError(bcErr) +
+        "; falling back to teamsettings routes"
       );
     }
     return await fetchTeamSettingsViaRest(teamContext);
   } catch (restError) {
     WriteLog(
       "Team settings REST fetch failed: " +
-        formatError(restError) +
-        "; attempting client call as fallback"
+      formatError(restError) +
+      "; attempting client call as fallback"
     );
   }
   try {
     WriteLog(
       "Fetching team settings via client fallback for team " +
-        (teamContext.teamId || teamContext.team)
+      (teamContext.teamId || teamContext.team)
     );
     const settings = await withTimeout(
       workClient!.getTeamSettings(teamContext),
@@ -462,14 +399,14 @@ async function getTeamSettingsData(teamContext: TeamContext): Promise<TeamSettin
     );
     WriteLog(
       "getTeamSettings (client) resolved for team " +
-        (teamContext.teamId || teamContext.team)
+      (teamContext.teamId || teamContext.team)
     );
     return settings;
   } catch (error) {
     WriteLog(
       "Team settings via client also failed or timed out: " +
-        formatError(error) +
-        "; proceeding with default settings"
+      formatError(error) +
+      "; proceeding with default settings"
     );
     return { bugsBehavior: BugsBehavior.Off } as unknown as TeamSetting;
   }
@@ -496,62 +433,62 @@ async function fetchBacklogConfigurationViaRest(
   if (projectId && teamId) {
     candidates.push(
       base +
-        encodeURIComponent(projectId) +
-        "/" + encodeURIComponent(teamId) +
-        "/_apis/work/backlogconfiguration?api-version=7.1-preview.2"
+      encodeURIComponent(projectId) +
+      "/" + encodeURIComponent(teamId) +
+      "/_apis/work/backlogconfiguration?api-version=7.1-preview.2"
     );
   }
   if (projectName && teamName) {
     candidates.push(
       base +
-        encodeURIComponent(projectName) +
-        "/" + encodeURIComponent(teamName) +
-        "/_apis/work/backlogconfiguration?api-version=7.1-preview.2"
+      encodeURIComponent(projectName) +
+      "/" + encodeURIComponent(teamName) +
+      "/_apis/work/backlogconfiguration?api-version=7.1-preview.2"
     );
   }
   if (projectId && teamName) {
     candidates.push(
       base +
-        encodeURIComponent(projectId) +
-        "/" + encodeURIComponent(teamName) +
-        "/_apis/work/backlogconfiguration?api-version=7.1-preview.2"
+      encodeURIComponent(projectId) +
+      "/" + encodeURIComponent(teamName) +
+      "/_apis/work/backlogconfiguration?api-version=7.1-preview.2"
     );
   }
   if (projectName && teamId) {
     candidates.push(
       base +
-        encodeURIComponent(projectName) +
-        "/" + encodeURIComponent(teamId) +
-        "/_apis/work/backlogconfiguration?api-version=7.1-preview.2"
+      encodeURIComponent(projectName) +
+      "/" + encodeURIComponent(teamId) +
+      "/_apis/work/backlogconfiguration?api-version=7.1-preview.2"
     );
   }
   // Query-param variants
   candidates.push(
     base +
-      "_apis/work/backlogconfiguration?project=" + encodeURIComponent(projectId) +
-      "&team=" + encodeURIComponent(teamId || teamName!) +
-      "&api-version=7.1-preview.2"
+    "_apis/work/backlogconfiguration?project=" + encodeURIComponent(projectId) +
+    "&team=" + encodeURIComponent(teamId || teamName!) +
+    "&api-version=7.1-preview.2"
   );
   if (projectName) {
     candidates.push(
       base +
-        "_apis/work/backlogconfiguration?project=" + encodeURIComponent(projectName) +
-        "&team=" + encodeURIComponent(teamName || teamId!) +
-        "&api-version=7.1-preview.2"
+      "_apis/work/backlogconfiguration?project=" + encodeURIComponent(projectName) +
+      "&team=" + encodeURIComponent(teamName || teamId!) +
+      "&api-version=7.1-preview.2"
     );
   }
   candidates.push(
     base +
-      encodeURIComponent(projectId) +
-      "/_apis/work/backlogconfiguration?team=" + encodeURIComponent(teamId || teamName!) +
-      "&api-version=7.1-preview.2"
+    encodeURIComponent(projectId) +
+    "/_apis/work/backlogconfiguration?team=" + encodeURIComponent(teamId || teamName!) +
+    "&api-version=7.1-preview.2"
   );
   if (projectName) {
     candidates.push(
       base +
-        encodeURIComponent(projectName) +
-        "/_apis/work/backlogconfiguration?team=" + encodeURIComponent(teamId || teamName!) +
-        "&api-version=7.1-preview.2"
+      encodeURIComponent(projectName) +
+      "/_apis/work/backlogconfiguration?team=" + encodeURIComponent(teamId || teamName!) +
+      "&api-version=7.1-preview.2"
     );
   }
 
@@ -565,8 +502,8 @@ async function fetchBacklogConfigurationViaRest(
         behaviorStr === "AsRequirements"
           ? (BugsBehavior.AsRequirements as any)
           : behaviorStr === "AsTasks"
-          ? (BugsBehavior.AsTasks as any)
-          : (BugsBehavior.Off as any);
+            ? (BugsBehavior.AsTasks as any)
+            : (BugsBehavior.Off as any);
       return { bugsBehavior: normalized } as unknown as TeamSetting;
     } catch (err) {
       lastError = err;
@@ -615,26 +552,26 @@ function logWorkItemBasicInfo(source: string, workItem: any): void {
     const iteration = fields["System.IterationPath"];
     WriteLog(
       "Work item (" +
-        source +
-        "): id=" +
-        id +
-        ", type=" +
-        (type || "unknown") +
-        ", state=" +
-        (state || "unknown") +
-        ", title=" +
-        (title || "unknown") +
-        ", assignedTo=" +
-        (assigned || "none") +
-        ", area=" +
-        (area || "unknown") +
-        ", iteration=" +
-        (iteration || "unknown")
+      source +
+      "): id=" +
+      id +
+      ", type=" +
+      (type || "unknown") +
+      ", state=" +
+      (state || "unknown") +
+      ", title=" +
+      (title || "unknown") +
+      ", assignedTo=" +
+      (assigned || "none") +
+      ", area=" +
+      (area || "unknown") +
+      ", iteration=" +
+      (iteration || "unknown")
     );
   } catch (e) {
     try {
       WriteLog("Failed to log work item basic info: " + formatError(e));
-    } catch {}
+    } catch { }
   }
 }
 
@@ -672,66 +609,66 @@ async function fetchTeamSettingsViaRest(
   if (projectId && teamId) {
     candidates.push(
       base +
-        encodeURIComponent(projectId) +
-        "/" + encodeURIComponent(teamId) +
-        "/_apis/work/teamsettings?api-version=7.1-preview.2"
+      encodeURIComponent(projectId) +
+      "/" + encodeURIComponent(teamId) +
+      "/_apis/work/teamsettings?api-version=7.1-preview.2"
     );
   }
   // B) projectName + teamName
   if (projectName && teamName) {
     candidates.push(
       base +
-        encodeURIComponent(projectName) +
-        "/" + encodeURIComponent(teamName) +
-        "/_apis/work/teamsettings?api-version=7.1-preview.2"
+      encodeURIComponent(projectName) +
+      "/" + encodeURIComponent(teamName) +
+      "/_apis/work/teamsettings?api-version=7.1-preview.2"
     );
   }
   // C) projectId + teamName (some hosts accept name in segment)
   if (projectId && teamName) {
     candidates.push(
       base +
-        encodeURIComponent(projectId) +
-        "/" + encodeURIComponent(teamName) +
-        "/_apis/work/teamsettings?api-version=7.1-preview.2"
+      encodeURIComponent(projectId) +
+      "/" + encodeURIComponent(teamName) +
+      "/_apis/work/teamsettings?api-version=7.1-preview.2"
     );
   }
   // D) projectName + teamId
   if (projectName && teamId) {
     candidates.push(
       base +
-        encodeURIComponent(projectName) +
-        "/" + encodeURIComponent(teamId) +
-        "/_apis/work/teamsettings?api-version=7.1-preview.2"
+      encodeURIComponent(projectName) +
+      "/" + encodeURIComponent(teamId) +
+      "/_apis/work/teamsettings?api-version=7.1-preview.2"
     );
   }
 
   // E) Query-param variants (try both id and name)
   candidates.push(
     base +
-      "_apis/work/teamsettings?project=" + encodeURIComponent(projectId) +
-      "&team=" + encodeURIComponent(teamId || teamName!) +
-      "&api-version=7.1-preview.2"
+    "_apis/work/teamsettings?project=" + encodeURIComponent(projectId) +
+    "&team=" + encodeURIComponent(teamId || teamName!) +
+    "&api-version=7.1-preview.2"
   );
   if (projectName) {
     candidates.push(
       base +
-        "_apis/work/teamsettings?project=" + encodeURIComponent(projectName) +
-        "&team=" + encodeURIComponent(teamName || teamId!) +
-        "&api-version=7.1-preview.2"
+      "_apis/work/teamsettings?project=" + encodeURIComponent(projectName) +
+      "&team=" + encodeURIComponent(teamName || teamId!) +
+      "&api-version=7.1-preview.2"
     );
   }
   candidates.push(
     base +
-      encodeURIComponent(projectId) +
-      "/_apis/work/teamsettings?team=" + encodeURIComponent(teamId || teamName!) +
-      "&api-version=7.1-preview.2"
+    encodeURIComponent(projectId) +
+    "/_apis/work/teamsettings?team=" + encodeURIComponent(teamId || teamName!) +
+    "&api-version=7.1-preview.2"
   );
   if (projectName) {
     candidates.push(
       base +
-        encodeURIComponent(projectName) +
-        "/_apis/work/teamsettings?team=" + encodeURIComponent(teamId || teamName!) +
-        "&api-version=7.1-preview.2"
+      encodeURIComponent(projectName) +
+      "/_apis/work/teamsettings?team=" + encodeURIComponent(teamId || teamName!) +
+      "&api-version=7.1-preview.2"
     );
   }
 
@@ -957,13 +894,13 @@ async function fetchWorkItemTypeCategoriesViaRest(): Promise<WorkItemTypeCategor
     try {
       WriteLog(
         "Categories fetched (" +
-          categories.length +
-          "): " +
-          categories
-            .map((c) => c.name || c.referenceName || "unknown")
-            .join(", ")
+        categories.length +
+        "): " +
+        categories
+          .map((c) => c.name || c.referenceName || "unknown")
+          .join(", ")
       );
-    } catch {}
+    } catch { }
     return categories;
   } catch (err) {
     WriteLog("Category list REST failed: " + formatError(err));
@@ -983,9 +920,9 @@ async function fetchWorkItemTypeCategoryViaRest(referenceName: string): Promise<
     try {
       WriteLog(
         "Category fetched: " +
-          (normalized.name || normalized.referenceName || referenceName)
+        (normalized.name || normalized.referenceName || referenceName)
       );
-    } catch {}
+    } catch { }
     return normalized;
   } catch (err) {
     WriteLog("Category detail REST failed: " + formatError(err));
@@ -1072,15 +1009,15 @@ async function restCreateWorkItem(
   const { id, name } = getProjectIds();
   const candidates = [
     base +
-      encodeURIComponent(id) +
-      "/_apis/wit/workitems/$" +
-      encodeURIComponent(workItemTypeName) +
-      "?api-version=7.1",
+    encodeURIComponent(id) +
+    "/_apis/wit/workitems/$" +
+    encodeURIComponent(workItemTypeName) +
+    "?api-version=7.1",
     base +
-      encodeURIComponent(name) +
-      "/_apis/wit/workitems/$" +
-      encodeURIComponent(workItemTypeName) +
-      "?api-version=7.1",
+    encodeURIComponent(name) +
+    "/_apis/wit/workitems/$" +
+    encodeURIComponent(workItemTypeName) +
+    "?api-version=7.1",
   ];
   const body = JSON.stringify(document);
   const init: RequestInit = {
@@ -1151,19 +1088,19 @@ async function createChildFromTemplate(
       await createWorkItem(service, currentWorkItem, taskTemplate, teamSettings);
       WriteLog(
         'Created child from template "' +
-          template.name +
-          '" for parent ' +
-          currentWorkItem["System.Id"]
+        template.name +
+        '" for parent ' +
+        currentWorkItem["System.Id"]
       );
     }
   } catch (error) {
     WriteLog(
       'Failed to create child from template "' +
-        template.name +
-        '" (id: ' +
-        template.id +
-        "): " +
-        formatError(error)
+      template.name +
+      '" (id: ' +
+      template.id +
+      "): " +
+      formatError(error)
     );
   }
 }
@@ -1181,8 +1118,8 @@ async function getTemplates(
   } catch (restError) {
     WriteLog(
       "Templates REST fetch failed: " +
-        formatError(restError) +
-        "; no fallback (REST-only)."
+      formatError(restError) +
+      "; no fallback (REST-only)."
     );
     return [];
   }
@@ -1293,8 +1230,8 @@ function createWorkItemFromTemplate(
     if (defaultPath) {
       WriteLog(
         "Info: Creating work item (template: " +
-          getTemplateName(taskTemplate) +
-          ") with team default iteration path."
+        getTemplateName(taskTemplate) +
+        ") with team default iteration path."
       );
       const iterationPath = backlogName ? backlogName + defaultPath : defaultPath;
       workItem.push({
@@ -1359,10 +1296,10 @@ async function createWorkItem(
   );
   WriteLog(
     'Creating work item from template "' +
-      getTemplateName(taskTemplate) +
-      '" with ' +
-      newWorkItem.length +
-      " patch operations"
+    getTemplateName(taskTemplate) +
+    '" with ' +
+    newWorkItem.length +
+    " patch operations"
   );
   let created: any;
   // Prefer REST first per hybrid approach
@@ -1371,8 +1308,8 @@ async function createWorkItem(
   } catch (restError) {
     WriteLog(
       "REST createWorkItem failed: " +
-        formatError(restError) +
-        "; attempting client call as fallback"
+      formatError(restError) +
+      "; attempting client call as fallback"
     );
     try {
       created = await withTimeout(
@@ -1431,8 +1368,8 @@ async function createWorkItem(
   } catch (restError) {
     WriteLog(
       "REST update links failed: " +
-        formatError(restError) +
-        "; attempting client call as fallback"
+      formatError(restError) +
+      "; attempting client call as fallback"
     );
     try {
       await withTimeout(
@@ -1467,8 +1404,8 @@ async function getChildTypes(
   } catch (restError) {
     WriteLog(
       "Categories REST fetch failed: " +
-        formatError(restError) +
-        "; no client fallback (REST-only)."
+      formatError(restError) +
+      "; no client fallback (REST-only)."
     );
     return null;
   }
@@ -1480,17 +1417,17 @@ async function getChildTypes(
   try {
     WriteLog(
       "Found work item type category for " +
-        workItemType +
-        ": " +
-        (category.name || category.referenceName || "unknown") +
-        " (" +
-        (category.referenceName || "unknown") +
-        "); types: " +
-        (category.workItemTypes || [])
-          .map((t) => t.name || "unknown")
-          .join(", ")
+      workItemType +
+      ": " +
+      (category.name || category.referenceName || "unknown") +
+      " (" +
+      (category.referenceName || "unknown") +
+      "); types: " +
+      (category.workItemTypes || [])
+        .map((t) => t.name || "unknown")
+        .join(", ")
     );
-  } catch {}
+  } catch { }
 
   const bugMode = bugsBehavior ?? BugsBehavior.Off;
 
@@ -1578,11 +1515,11 @@ function extractJSON(str: string | undefined, label: string): any[] | null {
       if (attempts > 0 && lastError) {
         WriteLog(
           'Failed to parse JSON for template "' +
-            label +
-            '" after ' +
-            attempts +
-            " attempts. Last error: " +
-            lastError
+          label +
+          '" after ' +
+          attempts +
+          " attempts. Last error: " +
+          lastError
         );
       }
       return null;
@@ -1604,11 +1541,11 @@ function extractJSON(str: string | undefined, label: string): any[] | null {
   if (attempts > 0 && lastError) {
     WriteLog(
       'Failed to parse JSON for template "' +
-        label +
-        '" after ' +
-        attempts +
-        " attempts. Last error: " +
-        lastError
+      label +
+      '" after ' +
+      attempts +
+      " attempts. Last error: " +
+      lastError
     );
   }
   return null;
@@ -1671,11 +1608,11 @@ function matchWildcardString(str: string, rule: string): boolean {
     value.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1");
   const regex = new RegExp(
     "^" +
-      rule
-        .split("*")
-        .map((segment) => escapeRegex(segment))
-        .join(".*") +
-      "$",
+    rule
+      .split("*")
+      .map((segment) => escapeRegex(segment))
+      .join(".*") +
+    "$",
     "i"
   );
   return regex.test(str);
