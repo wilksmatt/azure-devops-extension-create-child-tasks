@@ -1250,32 +1250,7 @@ async function getTemplates(
   }
 }
 
-function shouldFastTemplateFallback(): boolean {
-  try {
-    const loc = typeof window !== "undefined" ? window.location : null;
-    const base = getCollectionUri();
-    const sameOrigin = (() => {
-      try { return loc ? new URL(base).origin === new URL(loc.href).origin : false; } catch { return false; }
-    })();
-    const params = loc ? new URLSearchParams(loc.search) : new URLSearchParams();
-    const fromQuery = params.has("fastTemplates") ? params.get("fastTemplates") !== "0" : null;
-    let fromStorage: string | null = null;
-    try { fromStorage = typeof localStorage !== "undefined" ? localStorage.getItem("createChildTasks.fastTemplates") : null; } catch {}
-    const flag = fromQuery !== null ? fromQuery : fromStorage;
-    const enabled = flag === "1" || flag === "true" || (flag as any) === true;
-    return enabled || !sameOrigin;
-  } catch {
-    return false;
-  }
-}
-
-function makeInlineTemplateRefs(types: string[]): WorkItemTemplateReference[] {
-  const list: WorkItemTemplateReference[] = [] as any;
-  for (const t of types) {
-    list.push({ id: "inline:" + t, name: "Default " + t, description: "Inline default template" } as any);
-  }
-  return list;
-}
+// Removed legacy fast template fallback and inline defaults to enforce REST-only behavior
 
 async function getTemplate(id: string): Promise<WorkItemTemplate> {
   if (!webContext) {
@@ -1475,7 +1450,7 @@ async function createWorkItem(
       throw error;
     }
   }
-  WriteLog("Work item created with id=" + created.id + ", url=" + created.url);
+  // Success logging is consolidated in createChildFromTemplate
 
   if (service) {
     if (created.url) {
