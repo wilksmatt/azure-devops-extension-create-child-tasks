@@ -10,7 +10,6 @@ import {
     IWorkItemFormService,
     WorkItemTrackingServiceIds,
 } from "azure-devops-extension-api/WorkItemTracking/WorkItemTrackingServices";
-import { WorkRestClient } from "azure-devops-extension-api/Work/WorkClient";
 import { BugsBehavior, TeamSetting } from "azure-devops-extension-api/Work";
 import { TeamContext } from "azure-devops-extension-api/Core/Core";
 import { WorkItemTrackingRestClient } from "azure-devops-extension-api/WorkItemTracking/WorkItemTrackingClient";
@@ -43,7 +42,6 @@ WriteLog("Toolbar bundle loaded; waiting for SDK context.");
 let initPromise: Promise<void> | null = null;
 let webContext: ReturnType<typeof SDK.getWebContext> | null = null;
 let witClient: WorkItemTrackingRestClient | null = null;
-let workClient: WorkRestClient | null = null;
 let coreClient: CoreRestClient | null = null;
 let currentUser: IUserContext | null = null;
 let cachedTeamContext: TeamContext | null = null;
@@ -64,7 +62,6 @@ function ensureInitialized(): Promise<void> {
             primeCollectionUriFromContext(SDK.getConfiguration());
             currentUser = SDK.getUser();
             witClient = getClient(WorkItemTrackingRestClient);
-            workClient = getClient(WorkRestClient);
             coreClient = getClient(CoreRestClient);
             SDK.notifyLoadSucceeded();
             WriteLog("notifyLoadSucceeded dispatched; extension idle.");
@@ -225,41 +222,29 @@ async function run(context: ActionContext): Promise<void> {
 }
 
 /**
- * Determines whether the command is running on a form (active work item) or grid (list of ids)
- * and triggers the appropriate task creation workflow.
- * @param context Action context with optional work item ids.
+ * Triggers the task creation workflow when running on a form (active work item).
+ * Grid mode is not currently supported.
+ * @param context Action context (ignored for grid).
  * @returns Promise resolved when processing finishes.
  */
 async function create(context: ActionContext): Promise<void> {
-    WriteLog("Determining execution surface (form vs grid)...");
+
+    WriteLog("Determining action context (Form vs Grid)...");
     const service = await SDK.getService<IWorkItemFormService>(
         WorkItemTrackingServiceIds.WorkItemFormService
     );
+
     const hasActiveWorkItem = await service.hasActiveWorkItem();
-    WriteLog("Has active work item: " + hasActiveWorkItem);
+    //WriteLog("Has active work item: " + hasActiveWorkItem);
 
     if (hasActiveWorkItem) {
-        WriteLog("Active work item detected; running form workflow");
+        WriteLog("Active work item detected; running Form workflow");
         await addTasksOnForm(service);
         return;
     }
-
-    const ids = (context && context.workItemIds && context.workItemIds.length)
-        ? context.workItemIds
-        : context && context.id
-            ? [context.id]
-            : [];
-
-    WriteLog("Grid context work item ids: " + JSON.stringify(ids));
-
-    if (!ids.length) {
-        WriteLog("No work item context provided");
-        return;
-    }
-
-    for (const workItemId of ids) {
-        await addTasksOnGrid(workItemId);
-    }
+    
+    WriteLog("Form workflow only; open a work item and retry.");
+    return;
 }
 
 /**
@@ -275,14 +260,7 @@ async function addTasksOnForm(service: IWorkItemFormService): Promise<void> {
     }
 }
 
-/**
- * Adds tasks for a work item in grid context (no form service available).
- * @param workItemId The id of the parent work item.
- * @returns Promise that resolves when tasks are added.
- */
-function addTasksOnGrid(workItemId: number): Promise<void> {
-    return addTasks(workItemId, null);
-}
+// Grid workflow removed
 
 /**
  * Main workflow to add child tasks to a given work item: fetches work item data,
@@ -301,7 +279,7 @@ async function addTasks(
         workItemId +
         (service ? " (form)" : " (grid)")
     );
-    if (!webContext || !witClient || !workClient) {
+    if (!webContext || !witClient) {
         WriteLog("Clients/context missing; triggering ensureInitialized().");
         await ensureInitialized();
     }
@@ -322,25 +300,10 @@ async function addTasks(
     }
     WriteLog("Work item type: " + workItemType);
 
-    // Only fetch team settings when needed (primarily for Bug behavior)
-    let teamSettings: TeamSetting = { bugsBehavior: BugsBehavior.Off } as unknown as TeamSetting;
-    const needsBugBehavior = /^(Bug|Issue)$/i.test(String(workItemType));
-    if (needsBugBehavior) {
-        try {
-            teamSettings = await getTeamSettingsData(teamContext);
-            WriteLog("Team settings resolved; bugsBehavior=" + (teamSettings as any)?.bugsBehavior);
-        } catch (e) {
-            WriteLog(
-                "Team settings unavailable; proceeding with default bugsBehavior=Off: " +
-                formatError(e)
-            );
-            teamSettings = { bugsBehavior: BugsBehavior.Off } as unknown as TeamSetting;
-        }
-    } else {
-        WriteLog("Skipping team settings fetch (not needed for type " + workItemType + ")");
-    }
+    // Do not fetch team settings here; bug behavior will be resolved inside getChildTypes
+    const teamSettings: TeamSetting = { bugsBehavior: BugsBehavior.Off } as unknown as TeamSetting;
 
-    const childTypes = await getChildTypes(workItemType, teamSettings.bugsBehavior);
+    const childTypes = await getChildTypes(workItemType);
 
     if (!childTypes || !childTypes.length) {
         WriteLog("No child types returned for type " + workItemType);
@@ -411,68 +374,7 @@ async function getWorkItemData(workItemId: number): Promise<any> {
     }
 }
 
-/**
- * Retrieves team settings for the given team context, first deriving bugs behavior from
- * backlog configuration, then using teamsettings REST routes, and finally the client fallback.
- * @param teamContext The team context containing project/team identifiers.
- * @returns The resolved `TeamSetting` including `bugsBehavior`.
- */
-async function getTeamSettingsData(teamContext: TeamContext): Promise<TeamSetting> {
-    if (!workClient) {
-        await ensureInitialized();
-    }
-    // Prefer REST first; client calls have been unreliable in some hosts
-    try {
-        WriteLog(
-            "Fetching team settings via REST (preferred) for team " +
-            (teamContext.teamId || teamContext.team)
-        );
-        // First try backlog configuration (more widely available) to derive bugsBehavior
-        try {
-            const derived = await fetchBacklogConfigurationViaRest(teamContext);
-            WriteLog(
-                "Backlog configuration fetched; derived bugsBehavior=" +
-                (derived as any)?.bugsBehavior
-            );
-            return derived;
-        } catch (bcErr) {
-            WriteLog(
-                "Backlog configuration fetch failed: " +
-                formatError(bcErr) +
-                "; falling back to teamsettings routes"
-            );
-        }
-        return await fetchTeamSettingsViaRest(teamContext);
-    } catch (restError) {
-        WriteLog(
-            "Team settings REST fetch failed: " +
-            formatError(restError) +
-            "; attempting client call as fallback"
-        );
-    }
-    /*try {
-        WriteLog(
-            "Fetching team settings via client fallback for team " +
-            (teamContext.teamId || teamContext.team)
-        );
-        const settings = await withTimeout(
-            workClient!.getTeamSettings(teamContext),
-            "getTeamSettings"
-        );
-        WriteLog(
-            "getTeamSettings (client) resolved for team " +
-            (teamContext.teamId || teamContext.team)
-        );
-        return settings;
-    } catch (error) {
-        WriteLog(
-            "Team settings via client also failed or timed out: " +
-            formatError(error) +
-            "; proceeding with default settings"
-        );
-        return { bugsBehavior: BugsBehavior.Off } as unknown as TeamSetting;
-    }*/
-}
+ 
 
 /**
  * REST-only helper to derive `bugsBehavior` from backlog configuration endpoints.
@@ -608,39 +510,7 @@ async function fetchWorkItemViaRest(workItemId: number): Promise<any> {
     return adoFetch<any>(url);
 }
 
-/**
- * Retrieves team settings via a single canonical REST route using project/team names when available.
- * Falls back to IDs only if names are not present in the context.
- * @param teamContext The team context to use for routing.
- * @returns The team settings payload.
- */
-async function fetchTeamSettingsViaRest(
-    teamContext: TeamContext
-): Promise<TeamSetting> {
-    if (!webContext) {
-        throw new Error("Web context not initialized");
-    }
-    const base = getCollectionUri();
-    const projectSeg = (webContext.project && webContext.project.name) || webContext.project.id;
-    const teamSeg = teamContext.team || webContext.team?.name || teamContext.teamId || webContext.team?.id;
-
-    if (!projectSeg || !teamSeg) {
-        throw new Error("Missing project or team identifiers for team settings");
-    }
-
-    const url =
-        base +
-        encodeURIComponent(projectSeg) +
-        "/" + encodeURIComponent(teamSeg) +
-        "/_apis/work/teamsettings?api-version=7.1-preview.2";
-    WriteLog("Fetching team settings via REST: " + url);
-    try {
-        return await adoFetch<TeamSetting>(url);
-    } catch (err) {
-        WriteLog("Team settings REST failed: " + formatError(err));
-        throw err;
-    }
-}
+ 
 
 /**
  * Performs an authenticated fetch with SDK access token, setting appropriate headers,
@@ -1515,7 +1385,29 @@ async function getChildTypes(
         );
     } catch { }
 
-    const bugMode = bugsBehavior ?? BugsBehavior.Off;
+    // Resolve bug behavior on-demand if not provided and relevant
+    let bugMode: BugsBehavior = BugsBehavior.Off;
+    if (typeof bugsBehavior !== "undefined") {
+        bugMode = bugsBehavior;
+    } else {
+        const needsBugBehavior =
+            category.referenceName === "Microsoft.FeatureCategory" ||
+            category.referenceName === "Microsoft.RequirementCategory";
+        if (needsBugBehavior) {
+            try {
+                const teamContext = getTeamContext();
+                const derived = await fetchBacklogConfigurationViaRest(teamContext);
+                bugMode = (derived as any)?.bugsBehavior ?? BugsBehavior.Off;
+                WriteLog("Resolved bug behavior via REST: " + bugMode);
+            } catch (e) {
+                WriteLog(
+                    "Bug behavior lookup failed; defaulting to Off: " +
+                    formatError(e)
+                );
+                bugMode = BugsBehavior.Off;
+            }
+        }
+    }
 
     if (category.referenceName === "Microsoft.EpicCategory") {
         let featureCategory: WorkItemTypeCategory;
