@@ -211,10 +211,10 @@ async function resolveTeamContext(): Promise<void> {
  * @returns Promise that resolves when command execution completes.
  */
 async function run(context: ActionContext): Promise<void> {
-    WriteLog(
+    /*WriteLog(
         "Toolbar command invoked with context: " +
         JSON.stringify(context ?? {}, null, 2)
-    );
+    );*/
     primeCollectionUriFromContext(context);
     try {
         await ensureInitialized();
@@ -450,7 +450,7 @@ async function getTeamSettingsData(teamContext: TeamContext): Promise<TeamSettin
             "; attempting client call as fallback"
         );
     }
-    try {
+    /*try {
         WriteLog(
             "Fetching team settings via client fallback for team " +
             (teamContext.teamId || teamContext.team)
@@ -471,7 +471,7 @@ async function getTeamSettingsData(teamContext: TeamContext): Promise<TeamSettin
             "; proceeding with default settings"
         );
         return { bugsBehavior: BugsBehavior.Off } as unknown as TeamSetting;
-    }
+    }*/
 }
 
 /**
@@ -487,98 +487,34 @@ async function fetchBacklogConfigurationViaRest(
         throw new Error("Web context not initialized");
     }
     const base = getCollectionUri();
-    const projectId = webContext.project.id;
-    const projectName = webContext.project.name;
-    const teamId = teamContext.teamId || webContext.team?.id;
-    const teamName = teamContext.team || webContext.team?.name;
+    // Prefer name segments for maximum compatibility; fall back to IDs if names missing
+    const projectSeg = (webContext.project && webContext.project.name) || webContext.project.id;
+    const teamSeg = teamContext.team || webContext.team?.name || teamContext.teamId || webContext.team?.id;
 
-    if (!projectId || (!teamId && !teamName)) {
+    if (!projectSeg || !teamSeg) {
         throw new Error("Missing project or team identifiers for backlog configuration");
     }
 
-    const candidates: string[] = [];
-    // Path segment variants
-    if (projectId && teamId) {
-        candidates.push(
-            base +
-            encodeURIComponent(projectId) +
-            "/" + encodeURIComponent(teamId) +
-            "/_apis/work/backlogconfiguration?api-version=7.1-preview.2"
-        );
-    }
-    if (projectName && teamName) {
-        candidates.push(
-            base +
-            encodeURIComponent(projectName) +
-            "/" + encodeURIComponent(teamName) +
-            "/_apis/work/backlogconfiguration?api-version=7.1-preview.2"
-        );
-    }
-    if (projectId && teamName) {
-        candidates.push(
-            base +
-            encodeURIComponent(projectId) +
-            "/" + encodeURIComponent(teamName) +
-            "/_apis/work/backlogconfiguration?api-version=7.1-preview.2"
-        );
-    }
-    if (projectName && teamId) {
-        candidates.push(
-            base +
-            encodeURIComponent(projectName) +
-            "/" + encodeURIComponent(teamId) +
-            "/_apis/work/backlogconfiguration?api-version=7.1-preview.2"
-        );
-    }
-    // Query-param variants
-    candidates.push(
+    const url =
         base +
-        "_apis/work/backlogconfiguration?project=" + encodeURIComponent(projectId) +
-        "&team=" + encodeURIComponent(teamId || teamName!) +
-        "&api-version=7.1-preview.2"
-    );
-    if (projectName) {
-        candidates.push(
-            base +
-            "_apis/work/backlogconfiguration?project=" + encodeURIComponent(projectName) +
-            "&team=" + encodeURIComponent(teamName || teamId!) +
-            "&api-version=7.1-preview.2"
-        );
+        encodeURIComponent(projectSeg) +
+        "/" + encodeURIComponent(teamSeg) +
+        "/_apis/work/backlogconfiguration?api-version=7.1-preview.2";
+    WriteLog("Fetching backlog configuration via REST: " + url);
+    try {
+        const payload = await adoFetch<any>(url);
+        const behaviorStr = (payload && payload.bugsBehavior) || "Off";
+        const normalized =
+            behaviorStr === "AsRequirements"
+                ? (BugsBehavior.AsRequirements as any)
+                : behaviorStr === "AsTasks"
+                    ? (BugsBehavior.AsTasks as any)
+                    : (BugsBehavior.Off as any);
+        return { bugsBehavior: normalized } as unknown as TeamSetting;
+    } catch (err) {
+        WriteLog("Backlog configuration REST failed: " + formatError(err));
+        throw err;
     }
-    candidates.push(
-        base +
-        encodeURIComponent(projectId) +
-        "/_apis/work/backlogconfiguration?team=" + encodeURIComponent(teamId || teamName!) +
-        "&api-version=7.1-preview.2"
-    );
-    if (projectName) {
-        candidates.push(
-            base +
-            encodeURIComponent(projectName) +
-            "/_apis/work/backlogconfiguration?team=" + encodeURIComponent(teamId || teamName!) +
-            "&api-version=7.1-preview.2"
-        );
-    }
-
-    let lastError: any = null;
-    for (const url of candidates) {
-        WriteLog("Fetching backlog configuration via REST fallback: " + url);
-        try {
-            const payload = await adoFetch<any>(url);
-            const behaviorStr = (payload && payload.bugsBehavior) || "Off";
-            const normalized =
-                behaviorStr === "AsRequirements"
-                    ? (BugsBehavior.AsRequirements as any)
-                    : behaviorStr === "AsTasks"
-                        ? (BugsBehavior.AsTasks as any)
-                        : (BugsBehavior.Off as any);
-            return { bugsBehavior: normalized } as unknown as TeamSetting;
-        } catch (err) {
-            lastError = err;
-            WriteLog("Backlog configuration attempt failed: " + formatError(err));
-        }
-    }
-    throw lastError || new Error("All backlog configuration REST attempts failed");
 }
 
 /**
@@ -673,9 +609,10 @@ async function fetchWorkItemViaRest(workItemId: number): Promise<any> {
 }
 
 /**
- * Attempts team settings retrieval via documented REST routes with a set of routing variants.
+ * Retrieves team settings via a single canonical REST route using project/team names when available.
+ * Falls back to IDs only if names are not present in the context.
  * @param teamContext The team context to use for routing.
- * @returns The team settings payload if a route succeeds.
+ * @returns The team settings payload.
  */
 async function fetchTeamSettingsViaRest(
     teamContext: TeamContext
@@ -684,97 +621,25 @@ async function fetchTeamSettingsViaRest(
         throw new Error("Web context not initialized");
     }
     const base = getCollectionUri();
-    const projectId = webContext.project.id;
-    const projectName = webContext.project.name;
-    const teamId = teamContext.teamId || webContext.team?.id;
-    const teamName = teamContext.team || webContext.team?.name;
+    const projectSeg = (webContext.project && webContext.project.name) || webContext.project.id;
+    const teamSeg = teamContext.team || webContext.team?.name || teamContext.teamId || webContext.team?.id;
 
-    if (!projectId || (!teamId && !teamName)) {
-        throw new Error("Missing project or team identifiers for REST fallback");
+    if (!projectSeg || !teamSeg) {
+        throw new Error("Missing project or team identifiers for team settings");
     }
 
-    const candidates: string[] = [];
-
-    // Prefer documented path-segment routes first
-    // A) projectId + teamId
-    if (projectId && teamId) {
-        candidates.push(
-            base +
-            encodeURIComponent(projectId) +
-            "/" + encodeURIComponent(teamId) +
-            "/_apis/work/teamsettings?api-version=7.1-preview.2"
-        );
-    }
-    // B) projectName + teamName
-    if (projectName && teamName) {
-        candidates.push(
-            base +
-            encodeURIComponent(projectName) +
-            "/" + encodeURIComponent(teamName) +
-            "/_apis/work/teamsettings?api-version=7.1-preview.2"
-        );
-    }
-    // C) projectId + teamName (some hosts accept name in segment)
-    if (projectId && teamName) {
-        candidates.push(
-            base +
-            encodeURIComponent(projectId) +
-            "/" + encodeURIComponent(teamName) +
-            "/_apis/work/teamsettings?api-version=7.1-preview.2"
-        );
-    }
-    // D) projectName + teamId
-    if (projectName && teamId) {
-        candidates.push(
-            base +
-            encodeURIComponent(projectName) +
-            "/" + encodeURIComponent(teamId) +
-            "/_apis/work/teamsettings?api-version=7.1-preview.2"
-        );
-    }
-
-    // E) Query-param variants (try both id and name)
-    candidates.push(
+    const url =
         base +
-        "_apis/work/teamsettings?project=" + encodeURIComponent(projectId) +
-        "&team=" + encodeURIComponent(teamId || teamName!) +
-        "&api-version=7.1-preview.2"
-    );
-    if (projectName) {
-        candidates.push(
-            base +
-            "_apis/work/teamsettings?project=" + encodeURIComponent(projectName) +
-            "&team=" + encodeURIComponent(teamName || teamId!) +
-            "&api-version=7.1-preview.2"
-        );
+        encodeURIComponent(projectSeg) +
+        "/" + encodeURIComponent(teamSeg) +
+        "/_apis/work/teamsettings?api-version=7.1-preview.2";
+    WriteLog("Fetching team settings via REST: " + url);
+    try {
+        return await adoFetch<TeamSetting>(url);
+    } catch (err) {
+        WriteLog("Team settings REST failed: " + formatError(err));
+        throw err;
     }
-    candidates.push(
-        base +
-        encodeURIComponent(projectId) +
-        "/_apis/work/teamsettings?team=" + encodeURIComponent(teamId || teamName!) +
-        "&api-version=7.1-preview.2"
-    );
-    if (projectName) {
-        candidates.push(
-            base +
-            encodeURIComponent(projectName) +
-            "/_apis/work/teamsettings?team=" + encodeURIComponent(teamId || teamName!) +
-            "&api-version=7.1-preview.2"
-        );
-    }
-
-    let lastError: any = null;
-    for (const url of candidates) {
-        WriteLog("Fetching team settings via REST fallback: " + url);
-        try {
-            return await adoFetch<TeamSetting>(url);
-        } catch (err) {
-            lastError = err;
-            WriteLog("Team settings attempt failed: " + formatError(err));
-        }
-    }
-
-    throw lastError || new Error("All team settings REST attempts failed");
 }
 
 /**
@@ -1170,24 +1035,20 @@ async function fetchTemplateViaRest(id: string): Promise<WorkItemTemplate> {
  * @param document JSON Patch array of operations to set fields.
  * @returns Created work item payload.
  */
-async function restCreateWorkItem(
+async function createWorkItemViaRest(
     workItemTypeName: string,
     document: JsonPatch[]
 ): Promise<any> {
     const base = getCollectionUri();
     const { id, name } = getProjectIds();
-    const candidates = [
+    // Prefer project name in path when available; fall back to id.
+    const projectSeg = name || id;
+    const url =
         base +
-        encodeURIComponent(id) +
+        encodeURIComponent(projectSeg) +
         "/_apis/wit/workitems/$" +
         encodeURIComponent(workItemTypeName) +
-        "?api-version=7.1",
-        base +
-        encodeURIComponent(name) +
-        "/_apis/wit/workitems/$" +
-        encodeURIComponent(workItemTypeName) +
-        "?api-version=7.1",
-    ];
+        "?api-version=7.1";
     const body = JSON.stringify(document);
     const init: RequestInit = {
         method: "PATCH",
@@ -1197,17 +1058,13 @@ async function restCreateWorkItem(
         },
         body,
     };
-    let lastError: any = null;
-    for (const url of candidates) {
-        WriteLog("Creating work item via REST: " + url);
-        try {
-            return await adoFetch<any>(url, init);
-        } catch (err) {
-            lastError = err;
-            WriteLog("REST create attempt failed: " + formatError(err));
-        }
+    WriteLog("Creating work item via REST: " + url);
+    try {
+        return await adoFetch<any>(url, init);
+    } catch (err) {
+        WriteLog("REST create failed: " + formatError(err));
+        throw err;
     }
-    throw lastError || new Error("All REST create attempts failed");
 }
 
 /**
@@ -1216,16 +1073,20 @@ async function restCreateWorkItem(
  * @param document JSON Patch payload of relation operations.
  * @returns Updated work item payload.
  */
-async function restUpdateWorkItemLinks(
+async function updateWorkItemLinksViaRest(
     workItemId: number,
     document: JsonPatch[]
 ): Promise<any> {
     const base = getCollectionUri();
     const { id, name } = getProjectIds();
-    const candidates = [
-        base + encodeURIComponent(id) + "/_apis/wit/workitems/" + workItemId + "?api-version=7.1",
-        base + encodeURIComponent(name) + "/_apis/wit/workitems/" + workItemId + "?api-version=7.1",
-    ];
+    // Prefer project name in path when available; fall back to id.
+    const projectSeg = name || id;
+    const url =
+        base +
+        encodeURIComponent(projectSeg) +
+        "/_apis/wit/workitems/" +
+        workItemId +
+        "?api-version=7.1";
     const body = JSON.stringify(document);
     const init: RequestInit = {
         method: "PATCH",
@@ -1235,17 +1096,13 @@ async function restUpdateWorkItemLinks(
         },
         body,
     };
-    let lastError: any = null;
-    for (const url of candidates) {
-        WriteLog("Updating work item links via REST fallback: " + url);
-        try {
-            return await adoFetch<any>(url, init);
-        } catch (err) {
-            lastError = err;
-            WriteLog("REST update attempt failed: " + formatError(err));
-        }
+    WriteLog("Updating work item links via REST: " + url);
+    try {
+        return await adoFetch<any>(url, init);
+    } catch (err) {
+        WriteLog("REST update failed: " + formatError(err));
+        throw err;
     }
-    throw lastError || new Error("All REST update attempts failed");
 }
 
 /**
@@ -1499,20 +1356,13 @@ function createWorkItemFromTemplate(
  * @param teamSettings Team settings used during creation.
  * @returns Promise that resolves after creation and linking.
  */
-/**
- * Creates a child work item from a template, links it to the parent, and handles form/grid flows.
- * @param service Form service when available; null for grid context.
- * @param currentWorkItem Parent work item fields.
- * @param taskTemplate Template payload for the child.
- * @param teamSettings Team settings used during creation.
- * @returns Promise that resolves after creation and linking.
- */
 async function createWorkItem(
     service: IWorkItemFormService | null,
     currentWorkItem: WorkItemFields,
     taskTemplate: WorkItemTemplate,
     teamSettings: TeamSetting
 ): Promise<void> {
+
     if (!webContext || !witClient) {
         WriteLog("createWorkItem missing context/client; reinitializing.");
         await ensureInitialized();
@@ -1533,7 +1383,7 @@ async function createWorkItem(
     let created: any;
     // Prefer REST first per hybrid approach
     try {
-        created = await restCreateWorkItem(taskTemplate.workItemTypeName, newWorkItem);
+        created = await createWorkItemViaRest(taskTemplate.workItemTypeName, newWorkItem);
     } catch (restError) {
         WriteLog(
             "REST createWorkItem failed: " +
@@ -1593,7 +1443,7 @@ async function createWorkItem(
     ];
     // Prefer REST first for relation update
     try {
-        await restUpdateWorkItemLinks(currentWorkItem["System.Id"], document);
+        await updateWorkItemLinksViaRest(currentWorkItem["System.Id"], document);
     } catch (restError) {
         WriteLog(
             "REST update links failed: " +
