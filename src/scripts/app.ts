@@ -69,7 +69,7 @@ let cachedCollectionUri: string | null = null;
  * resolves team context, and logs basic diagnostics. Safe to call multiple times.
  * @returns Promise resolved when initialization completes.
  */
-function ensureInitialized(): Promise<void> {
+function initialize(): Promise<void> {
     if (!initPromise) {
         WriteLog("Initializing Azure DevOps SDK context...");
         initPromise = SDK.ready().then(async () => {
@@ -87,7 +87,9 @@ function ensureInitialized(): Promise<void> {
                     WriteLog("Contribution id: " + cid);
                 }
             } catch { }
-            await logNetworkDiagnostics();
+            //await logNetworkDiagnostics();
+
+            // Determine current context (project/team/user)
             if (webContext) {
                 WriteLog(
                     "Web context: project=" +
@@ -177,44 +179,6 @@ function getTeamContext(): TeamContext {
     return cachedTeamContext;
 }
 
-/**
- * Logs host and network diagnostics and probes `_apis/connectionData` for connectivity.
- * Useful for troubleshooting extension environment issues.
- * @returns Promise resolved after diagnostics complete.
- */
-async function logNetworkDiagnostics(): Promise<void> {
-    try {
-        const loc = typeof window !== 'undefined' ? window.location.href : 'n/a';
-        const base = (() => {
-            try { return getCollectionUri(); } catch { return 'unresolved'; }
-        })();
-        const pageContext = SDK.getPageContext() as any;
-        const host = (pageContext?.webContext?.host || pageContext?.host || {}) as any;
-        const publicPoint = host?.publicAccessPoint?.uri || host?.uri || 'unknown';
-        const sameOrigin = (() => {
-            try { return new URL(base).origin === new URL(loc).origin; } catch { return false; }
-        })();
-        WriteLog(
-            'Diagnostics: location=' + loc + ', collectionUri=' + base +
-            ', hostPublicAccessPoint=' + publicPoint + ', sameOrigin=' + sameOrigin
-        );
-        if (typeof base === 'string' && base !== 'unresolved') {
-            const url = base + '_apis/connectionData?connectOptions=IncludeServices&lastChangeId=-1&lastChangeId64=-1';
-            WriteLog('Diagnostics: probing connectionData ' + url);
-            try {
-                const result = await adoFetch<any>(url);
-                const svcCount = Array.isArray(result?.locationServiceData?.serviceDefinitions)
-                    ? result.locationServiceData.serviceDefinitions.length
-                    : 0;
-                WriteLog('Diagnostics: connectionData OK; services=' + svcCount);
-            } catch (err) {
-                WriteLog('Diagnostics: connectionData failed: ' + formatError(err));
-            }
-        }
-    } catch (e) {
-        WriteLog('Diagnostics: failed: ' + formatError(e));
-    }
-}
 // #endregion Initialization
 
 // =============================================================================
@@ -758,6 +722,45 @@ function formatError(error: unknown): string {
 }
 
 /**
+ * Logs host and network diagnostics and probes `_apis/connectionData` for connectivity.
+ * Useful for troubleshooting extension environment issues.
+ * @returns Promise resolved after diagnostics complete.
+ */
+async function logNetworkDiagnostics(): Promise<void> {
+    try {
+        const loc = typeof window !== 'undefined' ? window.location.href : 'n/a';
+        const base = (() => {
+            try { return getCollectionUri(); } catch { return 'unresolved'; }
+        })();
+        const pageContext = SDK.getPageContext() as any;
+        const host = (pageContext?.webContext?.host || pageContext?.host || {}) as any;
+        const publicPoint = host?.publicAccessPoint?.uri || host?.uri || 'unknown';
+        const sameOrigin = (() => {
+            try { return new URL(base).origin === new URL(loc).origin; } catch { return false; }
+        })();
+        WriteLog(
+            'Diagnostics: location=' + loc + ', collectionUri=' + base +
+            ', hostPublicAccessPoint=' + publicPoint + ', sameOrigin=' + sameOrigin
+        );
+        if (typeof base === 'string' && base !== 'unresolved') {
+            const url = base + '_apis/connectionData?connectOptions=IncludeServices&lastChangeId=-1&lastChangeId64=-1';
+            WriteLog('Diagnostics: probing connectionData ' + url);
+            try {
+                const result = await adoFetch<any>(url);
+                const svcCount = Array.isArray(result?.locationServiceData?.serviceDefinitions)
+                    ? result.locationServiceData.serviceDefinitions.length
+                    : 0;
+                WriteLog('Diagnostics: connectionData OK; services=' + svcCount);
+            } catch (err) {
+                WriteLog('Diagnostics: connectionData failed: ' + formatError(err));
+            }
+        }
+    } catch (e) {
+        WriteLog('Diagnostics: failed: ' + formatError(e));
+    }
+}
+
+/**
  * Logs a concise summary of a work item (id, type, title, state, assigned, area, iteration).
  * @param source Label indicating source (REST/CLIENT).
  * @param workItem Work item payload.
@@ -1074,7 +1077,7 @@ function withTimeout<T>(
 async function run(context: ActionContext): Promise<void> {
     primeCollectionUriFromContext(context);
     try {
-        await ensureInitialized();
+        await initialize();
         await create(context);
     } catch (error) {
         WriteLog("Unhandled error: " + formatError(error));
@@ -1132,12 +1135,11 @@ async function addTasks(
         (service ? " (form)" : " (grid)")
     );
     if (!webContext || !witClient) {
-        WriteLog("Clients/context missing; triggering ensureInitialized().");
-        await ensureInitialized();
+        WriteLog("Clients/context missing; triggering initialize().");
+        await initialize();
     }
 
-    const teamContext = getTeamContext();
-    const workItem = await getWorkItemData(workItemId);
+    const workItem = await getWorkItem(workItemId);
     const currentWorkItem: WorkItemFields = {
         ...(workItem.fields || {}),
         "System.Id": workItemId,
@@ -1186,9 +1188,9 @@ async function addTasks(
  * @param workItemId Work item id.
  * @returns Work item JSON payload.
  */
-async function getWorkItemData(workItemId: number): Promise<any> {
+async function getWorkItem(workItemId: number): Promise<any> {
     if (!witClient) {
-        await ensureInitialized();
+        await initialize();
     }
     try {
         WriteLog("Getting work item " + workItemId);
@@ -1201,21 +1203,6 @@ async function getWorkItemData(workItemId: number): Promise<any> {
             formatError(restError) +
             "; attempting client call as fallback"
         );
-    }
-    try {
-        WriteLog("Fetching work item " + workItemId + " via client fallback...");
-        const workItem = await withTimeout(
-            witClient!.getWorkItem(workItemId),
-            "getWorkItem"
-        );
-        WriteLog("getWorkItem (client) resolved for id " + workItemId);
-        logWorkItemBasicInfo("CLIENT", workItem);
-        return workItem;
-    } catch (error) {
-        WriteLog(
-            "getWorkItem via client also failed or timed out: " + formatError(error)
-        );
-        throw error;
     }
 }
 // #endregion Workflow
@@ -1236,7 +1223,7 @@ async function getTemplates(
 ): Promise<WorkItemTemplateReference[]> {
     if (!webContext || !witClient) {
         WriteLog("getTemplates missing context/client; reinitializing.");
-        await ensureInitialized();
+        await initialize();
     }
     try {
         return await fetchTemplatesViaRest(workItemTypes);
@@ -1257,7 +1244,7 @@ async function getTemplates(
  */
 async function getTemplate(id: string): Promise<WorkItemTemplate> {
     if (!webContext) {
-        await ensureInitialized();
+        await initialize();
     }
     WriteLog("Fetching template details via REST for id " + id);
     return fetchTemplateViaRest(id);
@@ -1397,7 +1384,7 @@ async function createWorkItem(
 
     if (!webContext || !witClient) {
         WriteLog("createWorkItem missing context/client; reinitializing.");
-        await ensureInitialized();
+        await initialize();
     }
 
     const newWorkItem = createWorkItemFromTemplate(
@@ -1547,7 +1534,7 @@ async function getChildTypes(
     bugsBehavior?: BugsBehavior
 ): Promise<string[] | null> {
     if (!webContext || !witClient) {
-        await ensureInitialized();
+        await initialize();
     }
 
     WriteLog("Resolving child types for " + workItemType + "...");
