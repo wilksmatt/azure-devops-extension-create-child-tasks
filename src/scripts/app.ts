@@ -1,3 +1,7 @@
+// =============================================================================
+// Section: Imports & Types
+// =============================================================================
+// #region ImportsAndTypes
 import * as SDK from "azure-devops-extension-sdk";
 import type { IUserContext } from "azure-devops-extension-sdk";
 import { getClient } from "azure-devops-extension-api";
@@ -33,6 +37,12 @@ type JsonPatch = {
     path: string;
     value?: any;
 };
+// #endregion ImportsAndTypes
+
+// =============================================================================
+// Section: Constants & Globals
+// =============================================================================
+// #region ConstantsAndGlobals
 
 const CLIENT_TIMEOUT_MS = 8000;
 
@@ -47,11 +57,17 @@ let currentUser: IUserContext | null = null;
 let cachedTeamContext: TeamContext | null = null;
 let accessTokenPromise: Promise<string> | null = null;
 let cachedCollectionUri: string | null = null;
+// #endregion ConstantsAndGlobals
+
+// =============================================================================
+// Section: Initialization
+// =============================================================================
+// #region Initialization
 
 /**
- * Initializes the Azure DevOps Extension SDK context, caches REST clients and user context,
- * resolves collection URI, runs diagnostics, and resolves team context. Safe to call multiple times.
- * @returns Promise that resolves when initialization completes.
+ * Initializes the Azure DevOps Extension SDK, caches clients and context,
+ * resolves team context, and logs basic diagnostics. Safe to call multiple times.
+ * @returns Promise resolved when initialization completes.
  */
 function ensureInitialized(): Promise<void> {
     if (!initPromise) {
@@ -91,60 +107,9 @@ function ensureInitialized(): Promise<void> {
 }
 
 /**
- * Logs network and host diagnostics including collection URI, public access point,
- * origin comparison, and probes `_apis/connectionData` to confirm basic connectivity.
- * Intended for troubleshooting; not required for core functionality.
- * @returns Promise that resolves after logging diagnostics.
- */
-async function logNetworkDiagnostics(): Promise<void> {
-    try {
-        const loc = typeof window !== 'undefined' ? window.location.href : 'n/a';
-        const base = (() => {
-            try { return getCollectionUri(); } catch { return 'unresolved'; }
-        })();
-        const pageContext = SDK.getPageContext() as any;
-        const host = (pageContext?.webContext?.host || pageContext?.host || {}) as any;
-        const publicPoint = host?.publicAccessPoint?.uri || host?.uri || 'unknown';
-        const sameOrigin = (() => {
-            try { return new URL(base).origin === new URL(loc).origin; } catch { return false; }
-        })();
-        WriteLog(
-            'Diagnostics: location=' + loc + ', collectionUri=' + base +
-            ', hostPublicAccessPoint=' + publicPoint + ', sameOrigin=' + sameOrigin
-        );
-        if (typeof base === 'string' && base !== 'unresolved') {
-            const url = base + '_apis/connectionData?connectOptions=IncludeServices&lastChangeId=-1&lastChangeId64=-1';
-            WriteLog('Diagnostics: probing connectionData ' + url);
-            try {
-                const result = await adoFetch<any>(url);
-                const svcCount = Array.isArray(result?.locationServiceData?.serviceDefinitions)
-                    ? result.locationServiceData.serviceDefinitions.length
-                    : 0;
-                WriteLog('Diagnostics: connectionData OK; services=' + svcCount);
-            } catch (err) {
-                WriteLog('Diagnostics: connectionData failed: ' + formatError(err));
-            }
-        }
-    } catch (e) {
-        WriteLog('Diagnostics: failed: ' + formatError(e));
-    }
-}
-
-/**
- * Returns the cached `TeamContext` once resolved. Throws if not yet available.
- * @returns TeamContext for current project/team.
- */
-function getTeamContext(): TeamContext {
-    if (!cachedTeamContext) {
-        throw new Error("Team context not available yet");
-    }
-    return cachedTeamContext;
-}
-
-/**
- * Resolves and caches the `TeamContext` from `webContext`, falling back to Core API to fetch
- * the project's default team when team info is missing.
- * @returns Promise that resolves after caching the team context.
+ * Resolves and caches the `TeamContext` from the current `webContext`.
+ * Falls back to Core API to load the project's default team if missing.
+ * @returns Promise resolved after team context is set.
  */
 async function resolveTeamContext(): Promise<void> {
     if (!webContext) {
@@ -202,323 +167,265 @@ async function resolveTeamContext(): Promise<void> {
 }
 
 /**
- * Entry point for the toolbar command. Ensures initialization and dispatches to create flow
- * based on provided `ActionContext`.
- * @param context Action context containing work item ids or single id.
- * @returns Promise that resolves when command execution completes.
+ * Returns the cached `TeamContext`. Throws if not yet initialized.
+ * @returns Current `TeamContext` for project/team.
  */
-async function run(context: ActionContext): Promise<void> {
-    /*WriteLog(
-        "Toolbar command invoked with context: " +
-        JSON.stringify(context ?? {}, null, 2)
-    );*/
-    primeCollectionUriFromContext(context);
+function getTeamContext(): TeamContext {
+    if (!cachedTeamContext) {
+        throw new Error("Team context not available yet");
+    }
+    return cachedTeamContext;
+}
+
+/**
+ * Logs host and network diagnostics and probes `_apis/connectionData` for connectivity.
+ * Useful for troubleshooting extension environment issues.
+ * @returns Promise resolved after diagnostics complete.
+ */
+async function logNetworkDiagnostics(): Promise<void> {
     try {
-        await ensureInitialized();
-        await create(context);
-    } catch (error) {
-        WriteLog("Unhandled error: " + formatError(error));
-    }
-}
-
-/**
- * Triggers the task creation workflow when running on a form (active work item).
- * Grid mode is not currently supported.
- * @param context Action context (ignored for grid).
- * @returns Promise resolved when processing finishes.
- */
-async function create(context: ActionContext): Promise<void> {
-
-    WriteLog("Determining action context (Form vs Grid)...");
-    const service = await SDK.getService<IWorkItemFormService>(
-        WorkItemTrackingServiceIds.WorkItemFormService
-    );
-
-    const hasActiveWorkItem = await service.hasActiveWorkItem();
-    //WriteLog("Has active work item: " + hasActiveWorkItem);
-
-    if (hasActiveWorkItem) {
-        WriteLog("Active work item detected; running Form workflow");
-        await addTasksOnForm(service);
-        return;
-    }
-    
-    WriteLog("Form workflow only; open a work item and retry.");
-    return;
-}
-
-/**
- * Adds tasks using the form service when a single active work item is open.
- * @param service Form service to access the active work item and link relations.
- * @returns Promise that resolves after tasks are added.
- */
-async function addTasksOnForm(service: IWorkItemFormService): Promise<void> {
-    const workItemId = await service.getId();
-    WriteLog("Form work item id: " + workItemId);
-    if (typeof workItemId === "number") {
-        await addTasks(workItemId, service);
-    }
-}
-
-// Grid workflow removed
-
-/**
- * Main workflow to add child tasks to a given work item: fetches work item data,
- * optionally resolves team settings for bug behavior, determines child types,
- * fetches templates, and creates child items.
- * @param workItemId Parent work item id.
- * @param service Form service when available; null for grid.
- * @returns Promise resolved after child creation flow completes.
- */
-async function addTasks(
-    workItemId: number,
-    service: IWorkItemFormService | null
-): Promise<void> {
-    WriteLog(
-        "Preparing to add tasks for work item " +
-        workItemId +
-        (service ? " (form)" : " (grid)")
-    );
-    if (!webContext || !witClient) {
-        WriteLog("Clients/context missing; triggering ensureInitialized().");
-        await ensureInitialized();
-    }
-
-    const teamContext = getTeamContext();
-    const workItem = await getWorkItemData(workItemId);
-    const currentWorkItem: WorkItemFields = {
-        ...(workItem.fields || {}),
-        "System.Id": workItemId,
-    };
-
-    // Simple Mode removed: always use full template flow
-
-    const workItemType = currentWorkItem["System.WorkItemType"];
-    if (!workItemType) {
-        WriteLog("Unable to determine work item type for id " + workItemId);
-        return;
-    }
-    WriteLog("Work item type: " + workItemType);
-
-    // Do not fetch team settings here; bug behavior will be resolved inside getChildTypes
-    const teamSettings: TeamSetting = { bugsBehavior: BugsBehavior.Off } as unknown as TeamSetting;
-
-    const childTypes = await getChildTypes(workItemType);
-
-    if (!childTypes || !childTypes.length) {
-        WriteLog("No child types returned for type " + workItemType);
-        return;
-    }
-
-    const templates = await getTemplates(childTypes);
-    WriteLog("Template count: " + templates.length);
-    if (!templates.length) {
-        const message =
-            "No " +
-            childTypes.join(", ") +
-            " templates found. Please add " +
-            childTypes.join(", ") +
-            " templates for the project team.";
-        await showDialog(message);
-        return;
-    }
-
-    const orderedTemplates = templates.sort(sortTemplates);
-    WriteLog(
-        "Processing templates: " + orderedTemplates.map((t) => t.name).join(", ")
-    );
-    for (const template of orderedTemplates) {
-        await createChildFromTemplate(service, currentWorkItem, template, teamSettings);
-    }
-}
-
-// Simple Mode test-creation helper removed
-
-/**
- * Retrieves a work item by id, preferring REST and falling back to the client if needed.
- * Logs basic info upon success.
- * @param workItemId The work item id to fetch.
- * @returns The work item payload.
- */
-async function getWorkItemData(workItemId: number): Promise<any> {
-    if (!witClient) {
-        await ensureInitialized();
-    }
-    // Prefer REST first; client calls have been timing out in some hosts
-    try {
-        WriteLog("Getting work item " + workItemId);
-        const workItem = await fetchWorkItemViaRest(workItemId);
-        logWorkItemBasicInfo("REST", workItem);
-        return workItem;
-    } catch (restError) {
+        const loc = typeof window !== 'undefined' ? window.location.href : 'n/a';
+        const base = (() => {
+            try { return getCollectionUri(); } catch { return 'unresolved'; }
+        })();
+        const pageContext = SDK.getPageContext() as any;
+        const host = (pageContext?.webContext?.host || pageContext?.host || {}) as any;
+        const publicPoint = host?.publicAccessPoint?.uri || host?.uri || 'unknown';
+        const sameOrigin = (() => {
+            try { return new URL(base).origin === new URL(loc).origin; } catch { return false; }
+        })();
         WriteLog(
-            "REST work item fetch failed: " +
-            formatError(restError) +
-            "; attempting client call as fallback"
+            'Diagnostics: location=' + loc + ', collectionUri=' + base +
+            ', hostPublicAccessPoint=' + publicPoint + ', sameOrigin=' + sameOrigin
         );
+        if (typeof base === 'string' && base !== 'unresolved') {
+            const url = base + '_apis/connectionData?connectOptions=IncludeServices&lastChangeId=-1&lastChangeId64=-1';
+            WriteLog('Diagnostics: probing connectionData ' + url);
+            try {
+                const result = await adoFetch<any>(url);
+                const svcCount = Array.isArray(result?.locationServiceData?.serviceDefinitions)
+                    ? result.locationServiceData.serviceDefinitions.length
+                    : 0;
+                WriteLog('Diagnostics: connectionData OK; services=' + svcCount);
+            } catch (err) {
+                WriteLog('Diagnostics: connectionData failed: ' + formatError(err));
+            }
+        }
+    } catch (e) {
+        WriteLog('Diagnostics: failed: ' + formatError(e));
     }
-    try {
-        WriteLog("Fetching work item " + workItemId + " via client fallback...");
-        const workItem = await withTimeout(
-            witClient!.getWorkItem(workItemId),
-            "getWorkItem"
-        );
-        WriteLog("getWorkItem (client) resolved for id " + workItemId);
-        logWorkItemBasicInfo("CLIENT", workItem);
-        return workItem;
-    } catch (error) {
-        WriteLog(
-            "getWorkItem via client also failed or timed out: " + formatError(error)
-        );
-        throw error;
+}
+// #endregion Initialization
+
+// =============================================================================
+// Section: Communication (Auth, Collection, REST)
+// =============================================================================
+// #region Communication
+
+/**
+ * Retrieves and caches the Azure DevOps access token from the SDK.
+ * @returns Access token string for authenticated REST calls.
+ */
+async function getAccessToken(): Promise<string> {
+    if (!accessTokenPromise) {
+        accessTokenPromise = SDK.getAccessToken().catch((error) => {
+            accessTokenPromise = null;
+            throw error;
+        });
+    }
+    return accessTokenPromise;
+}
+
+/**
+ * Resolves the collection base URI from SDK configuration/page context or location.
+ * @returns Collection URI ending with a trailing slash.
+ */
+function getCollectionUri(): string {
+    if (!cachedCollectionUri) {
+        primeCollectionUriFromContext(SDK.getConfiguration());
+    }
+
+    if (!cachedCollectionUri) {
+        const pageContext = SDK.getPageContext() as any;
+        primeCollectionUriFromContext(pageContext?.webContext);
+        primeCollectionUriFromContext(pageContext);
+    }
+
+    if (!cachedCollectionUri) {
+        const locationFallback = deriveUriFromLocation();
+        if (locationFallback) {
+            cachedCollectionUri = locationFallback;
+        }
+    }
+
+    if (!cachedCollectionUri) {
+        throw new Error("Unable to determine collection URI");
+    }
+
+    return cachedCollectionUri;
+}
+
+/**
+ * Attempts to derive and cache the collection URI from a given context object.
+ * No-op if already cached or context is missing.
+ * @param context Arbitrary SDK/page context object.
+ */
+function primeCollectionUriFromContext(context: unknown): void {
+    if (cachedCollectionUri || !context) {
+        return;
+    }
+
+    const contextData = extractContextData(context);
+    if (!contextData) {
+        return;
+    }
+
+    const candidate =
+        contextData?.collection?.uri ||
+        contextData?.account?.uri ||
+        contextData?.host?.uri ||
+        contextData?.navigation?.publicAccessPoint?.uri ||
+        contextData?.publicAccessPoint?.uri ||
+        tryBuildUriFromHost(contextData?.host) ||
+        tryBuildUriFromHost(contextData?.navigation?.serviceHost) ||
+        tryBuildUriFromHost(contextData?.navigation?.collection) ||
+        tryBuildUriFromHost(contextData?.navigation?.applicationServiceHost) ||
+        tryBuildUriFromRelative(contextData?.collection?.relativeUri) ||
+        tryBuildUriFromRelative(contextData?.account?.relativeUri) ||
+        tryBuildUriFromRelative(contextData?.host?.relativeUri);
+
+    if (candidate) {
+        cachedCollectionUri = ensureTrailingSlash(candidate);
     }
 }
 
- 
+/**
+ * Extracts nested context data from various SDK/config shapes.
+ * @param context Arbitrary SDK/config object.
+ * @returns Normalized context-like object or null.
+ */
+function extractContextData(context: unknown): any {
+    const anyContext = context as any;
+    return (
+        anyContext?.contextData ||
+        anyContext?.tfsContext?.contextData ||
+        anyContext?.tfsContext ||
+        anyContext ||
+        null
+    );
+}
 
 /**
- * REST-only helper to derive `bugsBehavior` from backlog configuration endpoints.
- * Tries multiple documented routing variants using project/team identifiers.
- * @param teamContext The team context with project and team.
- * @returns A TeamSetting object with normalized `bugsBehavior`.
+ * Constructs a URI from a host-like object containing scheme/authority/relative path.
+ * @param hostLike Host-like structure from SDK page context.
+ * @returns Absolute URI string or null if insufficient data.
  */
-async function fetchBacklogConfigurationViaRest(
-    teamContext: TeamContext
-): Promise<TeamSetting> {
+function tryBuildUriFromHost(hostLike: any): string | null {
+    if (!hostLike) {
+        return null;
+    }
+    if (typeof hostLike.uri === "string" && hostLike.uri) {
+        return hostLike.uri;
+    }
+
+    const defaultProtocol =
+        typeof window !== "undefined" && window.location?.protocol
+            ? window.location.protocol
+            : "https:";
+    const scheme = (hostLike.scheme || hostLike.protocol || defaultProtocol).replace(/:$/, "");
+    const authority = hostLike.authority || hostLike.host;
+    if (!authority) {
+        return null;
+    }
+    const relative = hostLike.relVDir || hostLike.relativeUri || hostLike.vDir || "";
+    const normalizedAuthority = authority.replace(/\/+$/, "");
+    const normalizedPath = relative
+        ? relative.startsWith("/")
+            ? relative
+            : "/" + relative
+        : "/";
+    return scheme + "://" + normalizedAuthority + normalizedPath;
+}
+
+/**
+ * Builds an absolute URI from a relative path using window.location origin.
+ * @param relativeUri Relative URI string.
+ * @returns Absolute URI or null if origin unavailable.
+ */
+function tryBuildUriFromRelative(relativeUri?: string | null): string | null {
+    if (!relativeUri) {
+        return null;
+    }
+    if (typeof window === "undefined" || !window.location) {
+        return null;
+    }
+    const origin =
+        window.location.origin ||
+        (window.location.protocol + "//" + window.location.host);
+    if (!origin) {
+        return null;
+    }
+    const normalized = relativeUri.startsWith("/")
+        ? relativeUri
+        : "/" + relativeUri;
+    return origin.replace(/\/+$/, "") + normalized;
+}
+
+/**
+ * Derives a likely collection URI from the current window location by stripping route segments.
+ * @returns Derived collection URI or null if not determinable.
+ */
+function deriveUriFromLocation(): string | null {
+    if (typeof window === "undefined" || !window.location) {
+        return null;
+    }
+    const origin =
+        window.location.origin ||
+        (window.location.protocol + "//" + window.location.host);
+    if (!origin) {
+        return null;
+    }
+    const segments = window.location.pathname
+        .split("/")
+        .filter((segment) => !!segment);
+    const baseSegments: string[] = [];
+    for (const segment of segments) {
+        if (segment.startsWith("_")) {
+            break;
+        }
+        baseSegments.push(segment);
+    }
+    const path = baseSegments.length ? "/" + baseSegments.join("/") + "/" : "/";
+    return ensureTrailingSlash(origin.replace(/\/+$/, "") + path);
+}
+
+/**
+ * Ensures a trailing slash on a URI string.
+ * @param value URI string.
+ * @returns URI ending with '/'.
+ */
+function ensureTrailingSlash(value: string): string {
+    return value.endsWith("/") ? value : value + "/";
+}
+
+/**
+ * Returns the current project id and name from `webContext`.
+ * @returns Object with `id` and `name`.
+ */
+function getProjectIds(): { id: string; name: string } {
     if (!webContext) {
         throw new Error("Web context not initialized");
     }
-    const base = getCollectionUri();
-    // Prefer name segments for maximum compatibility; fall back to IDs if names missing
-    const projectSeg = (webContext.project && webContext.project.name) || webContext.project.id;
-    const teamSeg = teamContext.team || webContext.team?.name || teamContext.teamId || webContext.team?.id;
-
-    if (!projectSeg || !teamSeg) {
-        throw new Error("Missing project or team identifiers for backlog configuration");
-    }
-
-    const url =
-        base +
-        encodeURIComponent(projectSeg) +
-        "/" + encodeURIComponent(teamSeg) +
-        "/_apis/work/backlogconfiguration?api-version=7.1-preview.2";
-    WriteLog("Fetching backlog configuration via REST: " + url);
-    try {
-        const payload = await adoFetch<any>(url);
-        const behaviorStr = (payload && payload.bugsBehavior) || "Off";
-        const normalized =
-            behaviorStr === "AsRequirements"
-                ? (BugsBehavior.AsRequirements as any)
-                : behaviorStr === "AsTasks"
-                    ? (BugsBehavior.AsTasks as any)
-                    : (BugsBehavior.Off as any);
-        return { bugsBehavior: normalized } as unknown as TeamSetting;
-    } catch (err) {
-        WriteLog("Backlog configuration REST failed: " + formatError(err));
-        throw err;
-    }
+    return { id: webContext.project.id, name: webContext.project.name };
 }
 
 /**
- * Wraps a promise with a timeout. Rejects with a descriptive error if the timeout elapses.
- * @typeParam T Return type of the wrapped promise.
- * @param promise The promise to wrap.
- * @param label A label used in the timeout error message.
- * @param timeoutMs Timeout in milliseconds.
- * @returns A promise that resolves/rejects with the original result or a timeout error.
- */
-function withTimeout<T>(
-    promise: Promise<T>,
-    label: string,
-    timeoutMs = CLIENT_TIMEOUT_MS
-): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-        const timeoutId = setTimeout(() => {
-            reject(new Error(label + " timed out after " + timeoutMs + "ms"));
-        }, timeoutMs);
-
-        promise.then(
-            (value) => {
-                clearTimeout(timeoutId);
-                resolve(value);
-            },
-            (error) => {
-                clearTimeout(timeoutId);
-                reject(error);
-            }
-        );
-    });
-}
-
-/**
- * Logs a concise summary of a work item (id, type, title, state, assigned, area, iteration).
- * @param source A label indicating the data source (REST/CLIENT).
- * @param workItem The work item payload.
- */
-function logWorkItemBasicInfo(source: string, workItem: any): void {
-    try {
-        const fields = (workItem && workItem.fields) || {};
-        const id = workItem && (workItem.id || fields["System.Id"]);
-        const type = fields["System.WorkItemType"];
-        const title = fields["System.Title"];
-        const state = fields["System.State"];
-        const assignedRaw = fields["System.AssignedTo"];
-        const assigned =
-            typeof assignedRaw === "string"
-                ? assignedRaw
-                : assignedRaw && (assignedRaw.displayName || assignedRaw.name || assignedRaw.uniqueName);
-        const area = fields["System.AreaPath"];
-        const iteration = fields["System.IterationPath"];
-        WriteLog(
-            "Work item (" +
-            source +
-            "): id=" +
-            id +
-            ", type=" +
-            (type || "unknown") +
-            ", state=" +
-            (state || "unknown") +
-            ", title=" +
-            (title || "unknown") +
-            ", assignedTo=" +
-            (assigned || "none") +
-            ", area=" +
-            (area || "unknown") +
-            ", iteration=" +
-            (iteration || "unknown")
-        );
-    } catch (e) {
-        try {
-            WriteLog("Failed to log work item basic info: " + formatError(e));
-        } catch { }
-    }
-}
-
-/**
- * Fetches a work item via REST with `?$expand=all` for field completeness.
- * @param workItemId The id of the work item to fetch.
- * @returns Work item JSON payload.
- */
-async function fetchWorkItemViaRest(workItemId: number): Promise<any> {
-    const base = getCollectionUri();
-    const url =
-        base +
-        "_apis/wit/workitems/" +
-        workItemId +
-        "?$expand=all&api-version=7.1-preview.3";
-    WriteLog("Fetching work item via REST: " + url);
-    return adoFetch<any>(url);
-}
-
- 
-
-/**
- * Performs an authenticated fetch with SDK access token, setting appropriate headers,
- * handling same-origin vs CORS, and throwing on non-OK responses.
+ * Performs an authenticated fetch using the SDK token, handling headers and CORS.
+ * Throws on non-OK responses and returns parsed JSON.
  * @typeParam T Expected JSON response type.
- * @param url The request URL.
- * @param init Optional fetch options (method, headers, body).
- * @returns Parsed JSON response of type T.
+ * @param url Request URL.
+ * @param init Optional fetch init options.
+ * @returns Parsed JSON of type T.
  */
 async function adoFetch<T>(url: string, init?: RequestInit): Promise<T> {
     const token = await getAccessToken();
@@ -561,204 +468,24 @@ async function adoFetch<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 /**
- * Retrieves and caches the Azure DevOps access token via SDK. Subsequent calls reuse the promise.
- * @returns The access token string.
+ * Fetches a work item via REST with `$expand=all` for complete fields.
+ * @param workItemId Work item id.
+ * @returns Work item JSON.
  */
-async function getAccessToken(): Promise<string> {
-    if (!accessTokenPromise) {
-        accessTokenPromise = SDK.getAccessToken().catch((error) => {
-            accessTokenPromise = null;
-            throw error;
-        });
-    }
-    return accessTokenPromise;
+async function fetchWorkItemViaRest(workItemId: number): Promise<any> {
+    const base = getCollectionUri();
+    const url =
+        base +
+        "_apis/wit/workitems/" +
+        workItemId +
+        "?$expand=all&api-version=7.1-preview.3";
+    WriteLog("Fetching work item via REST: " + url);
+    return adoFetch<any>(url);
 }
 
 /**
- * Resolves the collection URI from various SDK contexts, falling back to location-derived heuristics.
- * @returns The collection base URI with trailing slash.
- */
-function getCollectionUri(): string {
-    if (!cachedCollectionUri) {
-        primeCollectionUriFromContext(SDK.getConfiguration());
-    }
-
-    if (!cachedCollectionUri) {
-        const pageContext = SDK.getPageContext() as any;
-        primeCollectionUriFromContext(pageContext?.webContext);
-        primeCollectionUriFromContext(pageContext);
-    }
-
-    if (!cachedCollectionUri) {
-        const locationFallback = deriveUriFromLocation();
-        if (locationFallback) {
-            cachedCollectionUri = locationFallback;
-        }
-    }
-
-    if (!cachedCollectionUri) {
-        throw new Error("Unable to determine collection URI");
-    }
-
-    return cachedCollectionUri;
-}
-
-/**
- * Attempts to prime `cachedCollectionUri` from a provided context object, checking multiple properties.
- * @param context SDK configuration or page context object.
- */
-function primeCollectionUriFromContext(context: unknown): void {
-    if (cachedCollectionUri || !context) {
-        return;
-    }
-
-    const contextData = extractContextData(context);
-    if (!contextData) {
-        return;
-    }
-
-    const candidate =
-        contextData?.collection?.uri ||
-        contextData?.account?.uri ||
-        contextData?.host?.uri ||
-        contextData?.navigation?.publicAccessPoint?.uri ||
-        contextData?.publicAccessPoint?.uri ||
-        tryBuildUriFromHost(contextData?.host) ||
-        tryBuildUriFromHost(contextData?.navigation?.serviceHost) ||
-        tryBuildUriFromHost(contextData?.navigation?.collection) ||
-        tryBuildUriFromHost(contextData?.navigation?.applicationServiceHost) ||
-        tryBuildUriFromRelative(contextData?.collection?.relativeUri) ||
-        tryBuildUriFromRelative(contextData?.account?.relativeUri) ||
-        tryBuildUriFromRelative(contextData?.host?.relativeUri);
-
-    if (candidate) {
-        cachedCollectionUri = ensureTrailingSlash(candidate);
-    }
-}
-
-/**
- * Extracts a normalized contextData object from various SDK context shapes.
- * @param context Any SDK context-like object.
- * @returns Normalized context data or null.
- */
-function extractContextData(context: unknown): any {
-    const anyContext = context as any;
-    return (
-        anyContext?.contextData ||
-        anyContext?.tfsContext?.contextData ||
-        anyContext?.tfsContext ||
-        anyContext ||
-        null
-    );
-}
-
-/**
- * Attempts to construct a URI from host-like objects (scheme, authority, relative paths).
- * @param hostLike An object containing host properties.
- * @returns A URI string or null if insufficient data.
- */
-function tryBuildUriFromHost(hostLike: any): string | null {
-    if (!hostLike) {
-        return null;
-    }
-    if (typeof hostLike.uri === "string" && hostLike.uri) {
-        return hostLike.uri;
-    }
-
-    const defaultProtocol =
-        typeof window !== "undefined" && window.location?.protocol
-            ? window.location.protocol
-            : "https:";
-    const scheme = (hostLike.scheme || hostLike.protocol || defaultProtocol).replace(/:$/, "");
-    const authority = hostLike.authority || hostLike.host;
-    if (!authority) {
-        return null;
-    }
-    const relative = hostLike.relVDir || hostLike.relativeUri || hostLike.vDir || "";
-    const normalizedAuthority = authority.replace(/\/+$/, "");
-    const normalizedPath = relative
-        ? relative.startsWith("/")
-            ? relative
-            : "/" + relative
-        : "/";
-    return scheme + "://" + normalizedAuthority + normalizedPath;
-}
-
-/**
- * Constructs an absolute URI from a relative path using `window.location.origin`.
- * @param relativeUri Relative path string.
- * @returns Absolute URI string or null.
- */
-function tryBuildUriFromRelative(relativeUri?: string | null): string | null {
-    if (!relativeUri) {
-        return null;
-    }
-    if (typeof window === "undefined" || !window.location) {
-        return null;
-    }
-    const origin =
-        window.location.origin ||
-        (window.location.protocol + "//" + window.location.host);
-    if (!origin) {
-        return null;
-    }
-    const normalized = relativeUri.startsWith("/")
-        ? relativeUri
-        : "/" + relativeUri;
-    return origin.replace(/\/+$/, "") + normalized;
-}
-
-/**
- * Derives a collection-like base URI from `window.location` by removing `_` control segments.
- * @returns Derived base URI or null if not available.
- */
-function deriveUriFromLocation(): string | null {
-    if (typeof window === "undefined" || !window.location) {
-        return null;
-    }
-    const origin =
-        window.location.origin ||
-        (window.location.protocol + "//" + window.location.host);
-    if (!origin) {
-        return null;
-    }
-    const segments = window.location.pathname
-        .split("/")
-        .filter((segment) => !!segment);
-    const baseSegments: string[] = [];
-    for (const segment of segments) {
-        if (segment.startsWith("_")) {
-            break;
-        }
-        baseSegments.push(segment);
-    }
-    const path = baseSegments.length ? "/" + baseSegments.join("/") + "/" : "/";
-    return ensureTrailingSlash(origin.replace(/\/+$/, "") + path);
-}
-
-/**
- * Ensures the provided string ends with a trailing slash.
- * @param value The input string.
- * @returns The string with a trailing slash.
- */
-function ensureTrailingSlash(value: string): string {
-    return value.endsWith("/") ? value : value + "/";
-}
-
-/**
- * Returns the current project id and name from `webContext`.
- * @returns An object with `id` and `name`.
- */
-function getProjectIds(): { id: string; name: string } {
-    if (!webContext) {
-        throw new Error("Web context not initialized");
-    }
-    return { id: webContext.project.id, name: webContext.project.name };
-}
-
-/**
- * Fetches all work item type categories for the current project via REST.
- * @returns Array of normalized `WorkItemTypeCategory` entries.
+ * Lists work item type categories for the current project via REST.
+ * @returns Array of `WorkItemTypeCategory`.
  */
 async function fetchWorkItemTypeCategoriesViaRest(): Promise<WorkItemTypeCategory[]> {
     const base = getCollectionUri();
@@ -787,9 +514,9 @@ async function fetchWorkItemTypeCategoriesViaRest(): Promise<WorkItemTypeCategor
 }
 
 /**
- * Fetches a specific work item type category by its reference name via REST.
- * @param referenceName Category reference name (e.g., "Microsoft.TaskCategory").
- * @returns Normalized `WorkItemTypeCategory`.
+ * Fetches a single work item type category by reference name via REST.
+ * @param referenceName Category reference name (e.g., `Microsoft.TaskCategory`).
+ * @returns `WorkItemTypeCategory` payload.
  */
 async function fetchWorkItemTypeCategoryViaRest(referenceName: string): Promise<WorkItemTypeCategory> {
     const base = getCollectionUri();
@@ -814,24 +541,51 @@ async function fetchWorkItemTypeCategoryViaRest(referenceName: string): Promise<
 }
 
 /**
- * Normalizes category payloads into `WorkItemTypeCategory` shape with `workItemTypes` entries.
- * @param payload Raw REST payload.
- * @returns Normalized category object.
+ * Retrieves backlog configuration for a given team context via REST
+ * to derive `bugsBehavior`.
+ * @param teamContext Team context with project/team.
+ * @returns `TeamSetting` with normalized `bugsBehavior`.
  */
-function normalizeCategoryPayload(payload: any): WorkItemTypeCategory {
-    const types = (payload?.workItemTypes || []).map((t: any) => ({ name: t?.name, referenceName: t?.referenceName }));
-    const result: any = {
-        name: payload?.name,
-        referenceName: payload?.referenceName,
-        workItemTypes: types,
-    };
-    return result as unknown as WorkItemTypeCategory;
+async function fetchBacklogConfigurationViaRest(
+    teamContext: TeamContext
+): Promise<TeamSetting> {
+    if (!webContext) {
+        throw new Error("Web context not initialized");
+    }
+    const base = getCollectionUri();
+    const projectSeg = (webContext.project && webContext.project.name) || webContext.project.id;
+    const teamSeg = teamContext.team || webContext.team?.name || teamContext.teamId || webContext.team?.id;
+
+    if (!projectSeg || !teamSeg) {
+        throw new Error("Missing project or team identifiers for backlog configuration");
+    }
+
+    const url =
+        base +
+        encodeURIComponent(projectSeg) +
+        "/" + encodeURIComponent(teamSeg) +
+        "/_apis/work/backlogconfiguration?api-version=7.1-preview.2";
+    WriteLog("Fetching backlog configuration via REST: " + url);
+    try {
+        const payload = await adoFetch<any>(url);
+        const behaviorStr = (payload && payload.bugsBehavior) || "Off";
+        const normalized =
+            behaviorStr === "AsRequirements"
+                ? (BugsBehavior.AsRequirements as any)
+                : behaviorStr === "AsTasks"
+                    ? (BugsBehavior.AsTasks as any)
+                    : (BugsBehavior.Off as any);
+        return { bugsBehavior: normalized } as unknown as TeamSetting;
+    } catch (err) {
+        WriteLog("Backlog configuration REST failed: " + formatError(err));
+        throw err;
+    }
 }
 
 /**
- * Fetches team work item templates for the given work item type names (filtered one type per call).
- * @param workItemTypes Array of work item type names to filter templates (e.g., ["Task"]).
- * @returns Array of `WorkItemTemplateReference` across requested types.
+ * Fetches team-scoped work item templates for the provided types via REST.
+ * @param workItemTypes Work item type names to query.
+ * @returns Array of template references.
  */
 async function fetchTemplatesViaRest(
     workItemTypes: string[]
@@ -872,9 +626,9 @@ async function fetchTemplatesViaRest(
 }
 
 /**
- * Fetches a single template detail (`WorkItemTemplate`) by id for the current project/team.
+ * Fetches template details by id via REST.
  * @param id Template id.
- * @returns Full template payload including `fields`.
+ * @returns Template payload.
  */
 async function fetchTemplateViaRest(id: string): Promise<WorkItemTemplate> {
     const base = getCollectionUri();
@@ -900,9 +654,9 @@ async function fetchTemplateViaRest(id: string): Promise<WorkItemTemplate> {
 }
 
 /**
- * Creates a work item via REST using JSON Patch operations.
- * @param workItemTypeName The work item type name (e.g., "Task").
- * @param document JSON Patch array of operations to set fields.
+ * Creates a work item via REST using JSON Patch document.
+ * @param workItemTypeName Work item type name (e.g., `Task`).
+ * @param document JSON Patch operations.
  * @returns Created work item payload.
  */
 async function createWorkItemViaRest(
@@ -911,7 +665,6 @@ async function createWorkItemViaRest(
 ): Promise<any> {
     const base = getCollectionUri();
     const { id, name } = getProjectIds();
-    // Prefer project name in path when available; fall back to id.
     const projectSeg = name || id;
     const url =
         base +
@@ -938,9 +691,9 @@ async function createWorkItemViaRest(
 }
 
 /**
- * Updates a work item's relations (e.g., adding hierarchy links) via REST with JSON Patch.
- * @param workItemId The id of the work item to update.
- * @param document JSON Patch payload of relation operations.
+ * Updates a work item’s links via REST using JSON Patch document.
+ * @param workItemId Parent work item id.
+ * @param document JSON Patch operations to add relations.
  * @returns Updated work item payload.
  */
 async function updateWorkItemLinksViaRest(
@@ -949,7 +702,6 @@ async function updateWorkItemLinksViaRest(
 ): Promise<any> {
     const base = getCollectionUri();
     const { id, name } = getProjectIds();
-    // Prefer project name in path when available; fall back to id.
     const projectSeg = name || id;
     const url =
         base +
@@ -974,93 +726,247 @@ async function updateWorkItemLinksViaRest(
         throw err;
     }
 }
+// #endregion Communication
+
+// =============================================================================
+// Section: Utilities (logging, helpers)
+// =============================================================================
+// #region Utilities
 
 /**
- * Creates a child work item from a given template after validation checks.
- * @param service Form service for linking when available; null in grid.
- * @param currentWorkItem Parent work item fields.
- * @param template Template reference to instantiate.
- * @param teamSettings Team settings (bugs behavior).
- * @returns Promise resolved after creation attempt.
+ * Logs a namespaced message to the console for this extension.
+ * @param msg Message to log.
  */
-async function createChildFromTemplate(
-    service: IWorkItemFormService | null,
-    currentWorkItem: WorkItemFields,
-    template: WorkItemTemplateReference,
-    teamSettings: TeamSetting
-): Promise<void> {
+function WriteLog(msg: string): void {
+    console.log("Create Child Tasks: " + msg);
+}
+
+/**
+ * Normalizes unknown error values to a readable message string.
+ * @param error Unknown error value.
+ * @returns Error message string.
+ */
+function formatError(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
     try {
-        const taskTemplate = await getTemplate(template.id);
-        if (
-            isValidTemplateWIT(currentWorkItem, taskTemplate) &&
-            isValidTemplateTitle(currentWorkItem, taskTemplate)
-        ) {
-            await createWorkItem(service, currentWorkItem, taskTemplate, teamSettings);
-            WriteLog(
-                'Created child from template "' +
-                template.name +
-                '" for parent ' +
-                currentWorkItem["System.Id"]
-            );
+        return JSON.stringify(error);
+    } catch (_err) {
+        return String(error);
+    }
+}
+
+/**
+ * Logs a concise summary of a work item (id, type, title, state, assigned, area, iteration).
+ * @param source Label indicating source (REST/CLIENT).
+ * @param workItem Work item payload.
+ */
+function logWorkItemBasicInfo(source: string, workItem: any): void {
+    try {
+        const fields = (workItem && workItem.fields) || {};
+        const id = workItem && (workItem.id || fields["System.Id"]);
+        const type = fields["System.WorkItemType"];
+        const title = fields["System.Title"];
+        const state = fields["System.State"];
+        const assignedRaw = fields["System.AssignedTo"];
+        const assigned =
+            typeof assignedRaw === "string"
+                ? assignedRaw
+                : assignedRaw && (assignedRaw.displayName || assignedRaw.name || assignedRaw.uniqueName);
+        const area = fields["System.AreaPath"];
+        const iteration = fields["System.IterationPath"];
+        WriteLog(
+            "Work item (" +
+            source +
+            "): id=" +
+            id +
+            ", type=" +
+            (type || "unknown") +
+            ", state=" +
+            (state || "unknown") +
+            ", title=" +
+            (title || "unknown") +
+            ", assignedTo=" +
+            (assigned || "none") +
+            ", area=" +
+            (area || "unknown") +
+            ", iteration=" +
+            (iteration || "unknown")
+        );
+    } catch (e) {
+        try {
+            WriteLog("Failed to log work item basic info: " + formatError(e));
+        } catch { }
+    }
+}
+
+/**
+ * Sort comparator for template references by name (case-insensitive).
+ * @param a First template reference.
+ * @param b Second template reference.
+ * @returns Negative/zero/positive per standard comparator.
+ */
+function sortTemplates(
+    a: WorkItemTemplateReference,
+    b: WorkItemTemplateReference
+): number {
+    const nameA = a.name.toLowerCase();
+    const nameB = b.name.toLowerCase();
+    if (nameA < nameB) return -1;
+    if (nameA > nameB) return 1;
+    return 0;
+}
+
+/**
+ * Attempts to extract and parse the first valid JSON object from an arbitrary string.
+ * @param str Source string.
+ * @param label Label used for logging.
+ * @returns Tuple [object, startIndex, endIndex] or null.
+ */
+function extractJSON(str: string | undefined, label: string): any[] | null {
+    if (!str) {
+        return null;
+    }
+    let firstOpen = str.indexOf("{");
+    let firstClose = -1;
+    let candidate: string;
+    let attempts = 0;
+    let lastError: string | null = null;
+
+    if (firstOpen === -1) {
+        return null;
+    }
+
+    do {
+        firstClose = str.lastIndexOf("}");
+        if (firstClose <= firstOpen) {
+            if (attempts > 0 && lastError) {
+                WriteLog(
+                    'Failed to parse JSON for template "' +
+                    label +
+                    '" after ' +
+                    attempts +
+                    " attempts. Last error: " +
+                    lastError
+                );
+            }
+            return null;
         }
-    } catch (error) {
+        do {
+            candidate = str.substring(firstOpen, firstClose + 1);
+            try {
+                const res = JSON.parse(candidate);
+                return [res, firstOpen, firstClose + 1];
+            } catch (e) {
+                attempts++;
+                lastError = e instanceof Error ? e.message : String(e);
+            }
+            firstClose = str.substring(0, firstClose).lastIndexOf("}");
+        } while (firstClose > firstOpen);
+        firstOpen = str.indexOf("{", firstOpen + 1);
+    } while (firstOpen !== -1);
+
+    if (attempts > 0 && lastError) {
         WriteLog(
-            'Failed to create child from template "' +
-            template.name +
-            '" (id: ' +
-            template.id +
-            "): " +
-            formatError(error)
+            'Failed to parse JSON for template "' +
+            label +
+            '" after ' +
+            attempts +
+            " attempts. Last error: " +
+            lastError
         );
     }
+    return null;
 }
 
 /**
- * Retrieves all template references for the given child work item types via REST.
- * @param workItemTypes Child type names.
- * @returns Array of `WorkItemTemplateReference`.
+ * Performs case-insensitive wildcard matching with `*` across the entire string.
+ * @param str Input string.
+ * @param rule Wildcard rule.
+ * @returns True if matched.
  */
-async function getTemplates(
-    workItemTypes: string[]
-): Promise<WorkItemTemplateReference[]> {
-    if (!webContext || !witClient) {
-        WriteLog("getTemplates missing context/client; reinitializing.");
-        await ensureInitialized();
+function matchWildcardString(str: string, rule: string): boolean {
+    const escapeRegex = (value: string) =>
+        value.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1");
+    const regex = new RegExp(
+        "^" +
+        rule
+            .split("*")
+            .map((segment) => escapeRegex(segment))
+            .join(".*") +
+        "$",
+        "i"
+    );
+    return regex.test(str);
+}
+
+/**
+ * Matches a single field value in `currentWorkItem` against a filter element’s criteria.
+ * Supports wildcards for `System.Title` and multi-tags for `System.Tags`.
+ * @param fieldName Field name.
+ * @param currentWorkItem Current work item fields.
+ * @param filterElement Filter rule element.
+ * @returns True if the field matches or rule not specified.
+ */
+function matchField(
+    fieldName: string,
+    currentWorkItem: WorkItemFields,
+    filterElement: Record<string, any>
+): boolean {
+    const filterVal = filterElement[fieldName];
+    if (typeof filterVal === "undefined" || filterVal === null) {
+        return true;
     }
-    // REST-only: if REST fails, log and return no templates
-    try {
-        return await fetchTemplatesViaRest(workItemTypes);
-    } catch (restError) {
-        WriteLog(
-            "Templates REST fetch failed: " +
-            formatError(restError) +
-            "; no fallback (REST-only)."
+
+    const curValRaw = currentWorkItem ? currentWorkItem[fieldName] : undefined;
+
+    if (fieldName === "System.Title") {
+        const title = curValRaw == null ? "" : curValRaw.toString();
+        const rule = filterVal == null ? "" : filterVal.toString();
+        return matchWildcardString(title, rule);
+    }
+
+    if (fieldName === "System.Tags") {
+        const toTagArray = (val: any): string[] => {
+            if (Array.isArray(val)) return val;
+            if (val == null) return [];
+            return val
+                .toString()
+                .split(/[;,\n]/)
+                .map((s: string) => s.trim())
+                .filter((s: string) => s)
+                .map((s: string) => s.toLowerCase());
+        };
+
+        const currentTags = toTagArray(curValRaw);
+        const filterTags = toTagArray(filterVal);
+        return filterTags.every((tag) => currentTags.indexOf(tag) !== -1);
+    }
+
+    if (Array.isArray(filterVal)) {
+        const curStr = curValRaw == null ? "" : curValRaw.toString().toLowerCase();
+        return filterVal.some(
+            (value) =>
+                (value == null ? "" : value.toString().toLowerCase()) === curStr
         );
-        return [];
     }
-}
 
-// Removed legacy fast template fallback and inline defaults to enforce REST-only behavior
-
-/**
- * Retrieves full template details, using a cache when available.
- * @param id Template id.
- * @returns Full `WorkItemTemplate` payload.
- */
-async function getTemplate(id: string): Promise<WorkItemTemplate> {
-    if (!webContext) {
-        await ensureInitialized();
+    if (curValRaw == null) {
+        return false;
     }
-    WriteLog("Fetching template details via REST for id " + id);
-    return fetchTemplateViaRest(id);
+
+    return (
+        filterVal.toString().toLowerCase() === curValRaw.toString().toLowerCase()
+    );
 }
 
 /**
- * Validates whether a template field key should be applied when creating a work item.
- * Filters tags and dynamic tokens like @me/@currentiteration.
- * @param taskTemplate Template payload being applied.
- * @param key Field path/key.
- * @returns True if valid for inclusion.
+ * Validates whether a template field key should be applied.
+ * Rejects tags and special placeholders like `@me`/`@currentiteration`.
+ * @param taskTemplate Template payload.
+ * @param key Field name.
+ * @returns True if valid to apply.
  */
 function isPropertyValid(taskTemplate: WorkItemTemplate, key: string): boolean {
     const fields = taskTemplate.fields || {};
@@ -1081,9 +987,18 @@ function isPropertyValid(taskTemplate: WorkItemTemplate, key: string): boolean {
 }
 
 /**
- * Replaces `{ParentField}` placeholders in a template field value with values from the current work item.
- * @param fieldValue The template field value possibly containing placeholders.
- * @param currentWorkItem Parent work item fields.
+ * Safely returns template name or `unknown`.
+ * @param taskTemplate Template payload.
+ * @returns Template name string.
+ */
+function getTemplateName(taskTemplate: WorkItemTemplate): string {
+    return taskTemplate && taskTemplate.name ? taskTemplate.name : "unknown";
+}
+
+/**
+ * Replaces `{ParentField}` placeholders within a string using values from the current work item.
+ * @param fieldValue Source string possibly containing placeholders.
+ * @param currentWorkItem Current work item fields.
  * @returns Updated string with placeholders replaced.
  */
 function replaceReferenceToParentField(
@@ -1103,11 +1018,258 @@ function replaceReferenceToParentField(
 }
 
 /**
- * Builds a JSON Patch document from a template and parent fields, applying validations and substitutions.
+ * Finds the work item type category that includes the specified type.
+ * @param categories List of categories.
+ * @param workItemType Work item type name.
+ * @returns Matching category or undefined.
+ */
+function findWorkTypeCategory(categories: WorkItemTypeCategory[], workItemType: string): WorkItemTypeCategory | undefined {
+    return categories.find((category) =>
+        category.workItemTypes.some((type) => type.name === workItemType)
+    );
+}
+
+/**
+ * Wraps a promise with a timeout, rejecting with a descriptive error if exceeded.
+ * @typeParam T Promise value type.
+ * @param promise Source promise.
+ * @param label Label used in timeout error.
+ * @param timeoutMs Timeout in milliseconds.
+ * @returns Promise resolving/rejecting as original or timeout error.
+ */
+function withTimeout<T>(
+    promise: Promise<T>,
+    label: string,
+    timeoutMs = CLIENT_TIMEOUT_MS
+): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+            reject(new Error(label + " timed out after " + timeoutMs + "ms"));
+        }, timeoutMs);
+
+        promise.then(
+            (value) => {
+                clearTimeout(timeoutId);
+                resolve(value);
+            },
+            (error) => {
+                clearTimeout(timeoutId);
+                reject(error);
+            }
+        );
+    });
+}
+// #endregion Utilities
+
+// =============================================================================
+// Section: Workflow (run, create, addTasks...)
+// =============================================================================
+// #region Workflow
+
+/**
+ * Entry point for toolbar actions: primes collection URI, initializes SDK,
+ * and dispatches to `create` flow.
+ * @param context Action context (id/workItemIds/tfsContext).
+ */
+async function run(context: ActionContext): Promise<void> {
+    primeCollectionUriFromContext(context);
+    try {
+        await ensureInitialized();
+        await create(context);
+    } catch (error) {
+        WriteLog("Unhandled error: " + formatError(error));
+    }
+}
+
+/**
+ * Determines if an active work item form is open and triggers form workflow.
+ * Grid workflow is not supported.
+ * @param context Action context.
+ */
+async function create(context: ActionContext): Promise<void> {
+    WriteLog("Determining action context (Form vs Grid)...");
+    const service = await SDK.getService<IWorkItemFormService>(
+        WorkItemTrackingServiceIds.WorkItemFormService
+    );
+
+    const hasActiveWorkItem = await service.hasActiveWorkItem();
+
+    if (hasActiveWorkItem) {
+        WriteLog("Active work item detected; running Form workflow");
+        await addTasksOnForm(service);
+        return;
+    }
+    
+    WriteLog("Form workflow only; open a work item and retry.");
+    return;
+}
+
+/**
+ * Form-only workflow: gets active work item id and delegates to `addTasks`.
+ * @param service Work item form service.
+ */
+async function addTasksOnForm(service: IWorkItemFormService): Promise<void> {
+    const workItemId = await service.getId();
+    WriteLog("Form work item id: " + workItemId);
+    if (typeof workItemId === "number") {
+        await addTasks(workItemId, service);
+    }
+}
+
+/**
+ * Main workflow: fetches parent work item, resolves child types, loads templates,
+ * and creates child items, linking them to the parent.
+ * @param workItemId Parent work item id.
+ * @param service Work item form service when present; null otherwise.
+ */
+async function addTasks(
+    workItemId: number,
+    service: IWorkItemFormService | null
+): Promise<void> {
+    WriteLog(
+        "Preparing to add tasks for work item " +
+        workItemId +
+        (service ? " (form)" : " (grid)")
+    );
+    if (!webContext || !witClient) {
+        WriteLog("Clients/context missing; triggering ensureInitialized().");
+        await ensureInitialized();
+    }
+
+    const teamContext = getTeamContext();
+    const workItem = await getWorkItemData(workItemId);
+    const currentWorkItem: WorkItemFields = {
+        ...(workItem.fields || {}),
+        "System.Id": workItemId,
+    };
+
+    const workItemType = currentWorkItem["System.WorkItemType"];
+    if (!workItemType) {
+        WriteLog("Unable to determine work item type for id " + workItemId);
+        return;
+    }
+    WriteLog("Work item type: " + workItemType);
+
+    const teamSettings: TeamSetting = { bugsBehavior: BugsBehavior.Off } as unknown as TeamSetting;
+
+    const childTypes = await getChildTypes(workItemType);
+
+    if (!childTypes || !childTypes.length) {
+        WriteLog("No child types returned for type " + workItemType);
+        return;
+    }
+
+    const templates = await getTemplates(childTypes);
+    WriteLog("Template count: " + templates.length);
+    if (!templates.length) {
+        const message =
+            "No " +
+            childTypes.join(", ") +
+            " templates found. Please add " +
+            childTypes.join(", ") +
+            " templates for the project team.";
+        await showDialog(message);
+        return;
+    }
+
+    const orderedTemplates = templates.sort(sortTemplates);
+    WriteLog(
+        "Processing templates: " + orderedTemplates.map((t) => t.name).join(", ")
+    );
+    for (const template of orderedTemplates) {
+        await createChildFromTemplate(service, currentWorkItem, template, teamSettings);
+    }
+}
+
+/**
+ * Retrieves a work item by id, preferring REST and falling back to client if needed.
+ * @param workItemId Work item id.
+ * @returns Work item JSON payload.
+ */
+async function getWorkItemData(workItemId: number): Promise<any> {
+    if (!witClient) {
+        await ensureInitialized();
+    }
+    try {
+        WriteLog("Getting work item " + workItemId);
+        const workItem = await fetchWorkItemViaRest(workItemId);
+        logWorkItemBasicInfo("REST", workItem);
+        return workItem;
+    } catch (restError) {
+        WriteLog(
+            "REST work item fetch failed: " +
+            formatError(restError) +
+            "; attempting client call as fallback"
+        );
+    }
+    try {
+        WriteLog("Fetching work item " + workItemId + " via client fallback...");
+        const workItem = await withTimeout(
+            witClient!.getWorkItem(workItemId),
+            "getWorkItem"
+        );
+        WriteLog("getWorkItem (client) resolved for id " + workItemId);
+        logWorkItemBasicInfo("CLIENT", workItem);
+        return workItem;
+    } catch (error) {
+        WriteLog(
+            "getWorkItem via client also failed or timed out: " + formatError(error)
+        );
+        throw error;
+    }
+}
+// #endregion Workflow
+
+// =============================================================================
+// Section: Templates + Work Item Processing
+// =============================================================================
+// #region TemplatesAndProcessing
+
+/**
+ * Loads team templates for the provided child work item types.
+ * REST-only; returns empty array on failure.
+ * @param workItemTypes Child type names.
+ * @returns Array of template references.
+ */
+async function getTemplates(
+    workItemTypes: string[]
+): Promise<WorkItemTemplateReference[]> {
+    if (!webContext || !witClient) {
+        WriteLog("getTemplates missing context/client; reinitializing.");
+        await ensureInitialized();
+    }
+    try {
+        return await fetchTemplatesViaRest(workItemTypes);
+    } catch (restError) {
+        WriteLog(
+            "Templates REST fetch failed: " +
+            formatError(restError) +
+            "; no fallback (REST-only)."
+        );
+        return [];
+    }
+}
+
+/**
+ * Retrieves a template detail via REST.
+ * @param id Template id.
+ * @returns Template payload.
+ */
+async function getTemplate(id: string): Promise<WorkItemTemplate> {
+    if (!webContext) {
+        await ensureInitialized();
+    }
+    WriteLog("Fetching template details via REST for id " + id);
+    return fetchTemplateViaRest(id);
+}
+
+/**
+ * Converts a template and parent work item context into a JSON Patch document
+ * for creating a child work item.
  * @param currentWorkItem Parent work item fields.
- * @param taskTemplate Template payload with `fields`.
- * @param teamSettings Team settings for iteration/bug handling.
- * @returns JSON Patch array to create the child work item.
+ * @param taskTemplate Template payload.
+ * @param teamSettings Team settings for iteration handling.
+ * @returns JSON Patch operations for creation.
  */
 function createWorkItemFromTemplate(
     currentWorkItem: WorkItemFields,
@@ -1219,12 +1381,12 @@ function createWorkItemFromTemplate(
 }
 
 /**
- * Creates a child work item from a template, links it to the parent, and handles form/grid flows.
- * @param service Form service when available; null for grid context.
- * @param currentWorkItem Parent work item fields.
- * @param taskTemplate Template payload for the child.
- * @param teamSettings Team settings used during creation.
- * @returns Promise that resolves after creation and linking.
+ * Creates a child work item using REST (with client fallback) and links it to the parent.
+ * Saves the form when available.
+ * @param service Work item form service or null.
+ * @param currentWorkItem Parent fields.
+ * @param taskTemplate Template payload.
+ * @param teamSettings Team settings for iteration handling.
  */
 async function createWorkItem(
     service: IWorkItemFormService | null,
@@ -1251,7 +1413,6 @@ async function createWorkItem(
         " patch operations"
     );
     let created: any;
-    // Prefer REST first per hybrid approach
     try {
         created = await createWorkItemViaRest(taskTemplate.workItemTypeName, newWorkItem);
     } catch (restError) {
@@ -1274,7 +1435,6 @@ async function createWorkItem(
             throw error;
         }
     }
-    // Success logging is consolidated in createChildFromTemplate
 
     if (service) {
         if (created.url) {
@@ -1311,7 +1471,6 @@ async function createWorkItem(
             },
         },
     ];
-    // Prefer REST first for relation update
     try {
         await updateWorkItemLinksViaRest(currentWorkItem["System.Id"], document);
     } catch (restError) {
@@ -1338,11 +1497,50 @@ async function createWorkItem(
 }
 
 /**
- * Resolves child work item type names for a given parent type based on category rules
- * and team bugs behavior. Uses REST-only category endpoints.
- * @param workItemType Parent work item type name.
- * @param bugsBehavior Team bugs behavior mode.
- * @returns Array of child type names or null if none.
+ * Loads a template by reference and creates a child if it matches filters.
+ * @param service Work item form service or null.
+ * @param currentWorkItem Parent work item fields.
+ * @param template Template reference.
+ * @param teamSettings Team settings for iteration handling.
+ */
+async function createChildFromTemplate(
+    service: IWorkItemFormService | null,
+    currentWorkItem: WorkItemFields,
+    template: WorkItemTemplateReference,
+    teamSettings: TeamSetting
+): Promise<void> {
+    try {
+        const taskTemplate = await getTemplate(template.id);
+        if (
+            isValidTemplateWIT(currentWorkItem, taskTemplate) &&
+            isValidTemplateTitle(currentWorkItem, taskTemplate)
+        ) {
+            await createWorkItem(service, currentWorkItem, taskTemplate, teamSettings);
+            WriteLog(
+                'Created child from template "' +
+                template.name +
+                '" for parent ' +
+                currentWorkItem["System.Id"]
+            );
+        }
+    } catch (error) {
+        WriteLog(
+            'Failed to create child from template "' +
+            template.name +
+            '" (id: ' +
+            template.id +
+            "): " +
+            formatError(error)
+        );
+    }
+}
+
+/**
+ * Determines child work item types for a given parent type using category rules.
+ * Resolves `bugsBehavior` via backlog configuration when necessary.
+ * @param workItemType Parent work item type.
+ * @param bugsBehavior Optional override for bug behavior.
+ * @returns Array of child type names or null.
  */
 async function getChildTypes(
     workItemType: string,
@@ -1353,7 +1551,6 @@ async function getChildTypes(
     }
 
     WriteLog("Resolving child types for " + workItemType + "...");
-    // Prefer REST first for queries
     let categories: WorkItemTypeCategory[];
     try {
         categories = await fetchWorkItemTypeCategoriesViaRest();
@@ -1385,7 +1582,6 @@ async function getChildTypes(
         );
     } catch { }
 
-    // Resolve bug behavior on-demand if not provided and relevant
     let bugMode: BugsBehavior = BugsBehavior.Off;
     if (typeof bugsBehavior !== "undefined") {
         bugMode = bugsBehavior;
@@ -1454,183 +1650,25 @@ async function getChildTypes(
 }
 
 /**
- * Finds the category that contains the given work item type.
- * @param categories List of categories to search.
- * @param workItemType Work item type name to match.
- * @returns Matching category or undefined.
+ * Normalizes category payload to a stable shape.
+ * @param payload Raw category payload.
+ * @returns Normalized `WorkItemTypeCategory`.
  */
-function findWorkTypeCategory(categories: WorkItemTypeCategory[], workItemType: string): WorkItemTypeCategory | undefined {
-    return categories.find((category) =>
-        category.workItemTypes.some((type) => type.name === workItemType)
-    );
+function normalizeCategoryPayload(payload: any): WorkItemTypeCategory {
+    const types = (payload?.workItemTypes || []).map((t: any) => ({ name: t?.name, referenceName: t?.referenceName }));
+    const result: any = {
+        name: payload?.name,
+        referenceName: payload?.referenceName,
+        workItemTypes: types,
+    };
+    return result as unknown as WorkItemTypeCategory;
 }
 
 /**
- * Sort comparator for templates by case-insensitive name ascending.
- * @param a First template.
- * @param b Second template.
- * @returns Negative/zero/positive per comparator contract.
- */
-function sortTemplates(
-    a: WorkItemTemplateReference,
-    b: WorkItemTemplateReference
-): number {
-    const nameA = a.name.toLowerCase();
-    const nameB = b.name.toLowerCase();
-    if (nameA < nameB) return -1;
-    if (nameA > nameB) return 1;
-    return 0;
-}
-
-/**
- * Extracts a list of JSON objects from a string that may contain embedded JSON.
- * @param str Input string.
- * @param label Label for logging context.
- * @returns Array of parsed objects or null.
- */
-function extractJSON(str: string | undefined, label: string): any[] | null {
-    if (!str) {
-        return null;
-    }
-    let firstOpen = str.indexOf("{");
-    let firstClose = -1;
-    let candidate: string;
-    let attempts = 0;
-    let lastError: string | null = null;
-
-    if (firstOpen === -1) {
-        return null;
-    }
-
-    do {
-        firstClose = str.lastIndexOf("}");
-        if (firstClose <= firstOpen) {
-            if (attempts > 0 && lastError) {
-                WriteLog(
-                    'Failed to parse JSON for template "' +
-                    label +
-                    '" after ' +
-                    attempts +
-                    " attempts. Last error: " +
-                    lastError
-                );
-            }
-            return null;
-        }
-        do {
-            candidate = str.substring(firstOpen, firstClose + 1);
-            try {
-                const res = JSON.parse(candidate);
-                return [res, firstOpen, firstClose + 1];
-            } catch (e) {
-                attempts++;
-                lastError = e instanceof Error ? e.message : String(e);
-            }
-            firstClose = str.substring(0, firstClose).lastIndexOf("}");
-        } while (firstClose > firstOpen);
-        firstOpen = str.indexOf("{", firstOpen + 1);
-    } while (firstOpen !== -1);
-
-    if (attempts > 0 && lastError) {
-        WriteLog(
-            'Failed to parse JSON for template "' +
-            label +
-            '" after ' +
-            attempts +
-            " attempts. Last error: " +
-            lastError
-        );
-    }
-    return null;
-}
-
-/**
- * Matches a field on the current work item against a filter element rule.
- * Supports wildcard match for title, tag inclusion, arrays, and exact comparisons.
- * @param fieldName The field reference name to evaluate.
- * @param currentWorkItem Current parent work item fields.
- * @param filterElement A filter object containing expected values.
- * @returns True if the field satisfies the filter rule.
- */
-function matchField(
-    fieldName: string,
-    currentWorkItem: WorkItemFields,
-    filterElement: Record<string, any>
-): boolean {
-    const filterVal = filterElement[fieldName];
-    if (typeof filterVal === "undefined" || filterVal === null) {
-        return true;
-    }
-
-    const curValRaw = currentWorkItem ? currentWorkItem[fieldName] : undefined;
-
-    if (fieldName === "System.Title") {
-        const title = curValRaw == null ? "" : curValRaw.toString();
-        const rule = filterVal == null ? "" : filterVal.toString();
-        return matchWildcardString(title, rule);
-    }
-
-    if (fieldName === "System.Tags") {
-        const toTagArray = (val: any): string[] => {
-            if (Array.isArray(val)) return val;
-            if (val == null) return [];
-            return val
-                .toString()
-                .split(/[;,\n]/)
-                .map((s: string) => s.trim())
-                .filter((s: string) => s)
-                .map((s: string) => s.toLowerCase());
-        };
-
-        const currentTags = toTagArray(curValRaw);
-        const filterTags = toTagArray(filterVal);
-        return filterTags.every((tag) => currentTags.indexOf(tag) !== -1);
-    }
-
-    if (Array.isArray(filterVal)) {
-        const curStr = curValRaw == null ? "" : curValRaw.toString().toLowerCase();
-        return filterVal.some(
-            (value) =>
-                (value == null ? "" : value.toString().toLowerCase()) === curStr
-        );
-    }
-
-    if (curValRaw == null) {
-        return false;
-    }
-
-    return (
-        filterVal.toString().toLowerCase() === curValRaw.toString().toLowerCase()
-    );
-}
-
-/**
- * Tests a string against a simple wildcard rule where `*` matches any sequence (case-insensitive).
- * @param str Input string to test.
- * @param rule Wildcard rule string.
- * @returns True if the string matches the rule.
- */
-function matchWildcardString(str: string, rule: string): boolean {
-    const escapeRegex = (value: string) =>
-        value.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1");
-    const regex = new RegExp(
-        "^" +
-        rule
-            .split("*")
-            .map((segment) => escapeRegex(segment))
-            .join(".*") +
-        "$",
-        "i"
-    );
-    return regex.test(str);
-}
-
-/**
- * Determines whether a template is applicable to the current work item type
- * using JSON filters (applywhen) or legacy bracket filters in description.
- * @param currentWorkItem Current parent work item fields.
- * @param taskTemplate Template payload to evaluate.
- * @returns True if applicable; otherwise false.
+ * Checks whether a template applies based on filters in its description (JSON or bracket list).
+ * @param currentWorkItem Parent work item fields.
+ * @param taskTemplate Template payload.
+ * @returns True if template is applicable.
  */
 function isValidTemplateWIT(
     currentWorkItem: WorkItemFields,
@@ -1665,7 +1703,7 @@ function isValidTemplateWIT(
 
     const filters =
         taskTemplate.description &&
-        taskTemplate.description.match(/[^[\]]+(?=])/g);
+        taskTemplate.description.match(/[[^\]]+(?=])/g);
     if (filters) {
         for (let i = 0; i < filters.length; i++) {
             const found = filters[i]
@@ -1684,10 +1722,10 @@ function isValidTemplateWIT(
 }
 
 /**
- * Placeholder for title validation rules; currently always returns true.
- * @param _currentWorkItem Parent work item fields (unused).
- * @param _taskTemplate Template payload (unused).
- * @returns True.
+ * Title validation hook; currently accepts all templates.
+ * @param _currentWorkItem Parent work item fields.
+ * @param _taskTemplate Template payload.
+ * @returns True always.
  */
 function isValidTemplateTitle(
     _currentWorkItem: WorkItemFields,
@@ -1695,11 +1733,16 @@ function isValidTemplateTitle(
 ): boolean {
     return true;
 }
+// #endregion TemplatesAndProcessing
+
+// =============================================================================
+// Section: Other (Dialogs, Registration)
+// =============================================================================
+// #region Other
 
 /**
- * Shows a message dialog via Host Page Layout service.
- * @param message Message text to display.
- * @returns Promise resolved after dialog is opened.
+ * Displays a message dialog in Azure DevOps host.
+ * @param message Message to show.
  */
 async function showDialog(message: string): Promise<void> {
     const dialogService = await SDK.getService<IHostPageLayoutService>(
@@ -1711,41 +1754,9 @@ async function showDialog(message: string): Promise<void> {
     });
 }
 
-/**
- * Writes a namespaced log message to the console.
- * @param msg Message to log.
- */
-function WriteLog(msg: string): void {
-    console.log("Create Child Tasks: " + msg);
-}
-
-/**
- * Formats unknown error values into a readable string.
- * @param error Unknown error.
- * @returns Readable error string.
- */
-function formatError(error: unknown): string {
-    if (error instanceof Error) {
-        return error.message;
-    }
-    try {
-        return JSON.stringify(error);
-    } catch (_err) {
-        return String(error);
-    }
-}
-
-/**
- * Returns a friendly template name or "unknown" when missing.
- * @param taskTemplate Template payload.
- * @returns Template name.
- */
-function getTemplateName(taskTemplate: WorkItemTemplate): string {
-    return taskTemplate && taskTemplate.name ? taskTemplate.name : "unknown";
-}
-
 SDK.register("create-child-task-work-item-button", () => ({
     createTasks: (context: ActionContext) => run(context),
     execute: (context: ActionContext) => run(context),
 }));
 WriteLog("SDK.register completed for create-child-task-work-item-button.");
+// #endregion Other
