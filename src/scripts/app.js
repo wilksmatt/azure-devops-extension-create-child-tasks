@@ -3,7 +3,8 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
 
         var ctx = null;
         var INIT_TS = null; // timestamp when create() starts
-        var LOG_ENABLED = false; // set via configs/dev.json (perfLogs)
+        var LOG_ENABLED = true; // set via configs/dev.json (perfLogs)
+        var USE_REST_CREATE = true; // set via configs/dev.json (useRestCreate)
 
         // ===== Startup & Logging =====
 
@@ -25,35 +26,32 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                 writeLog(label + ' (since init: ' + sinceInit + ' ms)');
             }
         }
-        
 
-        /**
-         * Loads the dev environment logging flag from `configs/dev.json` to gate console logs.
-         * Silently ignores missing or malformed configs.
-         */
-        function loadEnvLoggingFlag() {
-            try {
-                var xhr = new XMLHttpRequest();
-                xhr.open('GET', 'configs/dev.json', true);
-                xhr.onreadystatechange = function() {
-                    if (xhr.readyState === 4) {
-                        if (xhr.status >= 200 && xhr.status < 300) {
-                            try {
-                                var cfg = JSON.parse(xhr.responseText);
-                                if (cfg && typeof cfg.perfLogs !== 'undefined') {
-                                    LOG_ENABLED = !!cfg.perfLogs;
-                                }
-                            } catch (e) {
-                                // ignore malformed config
+        // ===== REST Helpers =====
+
+        function restJsonPatch(url, token, patchOps) {
+            return Q.Promise(function(resolve, reject){
+                try {
+                    var xhr = new XMLHttpRequest();
+                    xhr.open('PATCH', url, true);
+                    xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+                    xhr.setRequestHeader('Accept', 'application/json');
+                    xhr.setRequestHeader('Content-Type', 'application/json-patch+json');
+                    // Suppress FedAuth redirects inside iframe contexts for REST calls
+                    xhr.setRequestHeader('X-TFS-FedAuthRedirect', 'Suppress');
+                    xhr.onreadystatechange = function(){
+                        if (xhr.readyState === 4) {
+                            if (xhr.status >= 200 && xhr.status < 300) {
+                                try { resolve(JSON.parse(xhr.responseText)); } catch (e) { resolve({}); }
+                            } else {
+                                var msg = xhr.responseText || (xhr.status + ' ' + xhr.statusText);
+                                reject(new Error(msg));
                             }
                         }
-                        // silently ignore missing file (non-dev builds)
-                    }
-                };
-                xhr.send();
-            } catch (e) {
-                // ignore network errors
-            }
+                    };
+                    xhr.send(JSON.stringify(patchOps));
+                } catch (e) { reject(e); }
+            });
         }
 
         /**
@@ -276,6 +274,41 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
         }
 
         /**
+         * Alternate implementation using direct REST calls to avoid iframe messaging.
+         * Creates the child work item, then updates the parent with a forward relation.
+         */
+        function createWorkItemViaRest(service, currentWorkItem, taskTemplate, teamSettings) {
+            var newWorkItem = createWorkItemFromTemplate(currentWorkItem, taskTemplate, teamSettings);
+
+            var wc = VSS.getWebContext();
+            var base = wc && wc.collection && wc.collection.uri ? wc.collection.uri : (wc.account && wc.account.uri ? wc.account.uri : '');
+            var projectName = wc && wc.project && wc.project.name ? wc.project.name : '';
+            var workItemId = currentWorkItem['System.Id'];
+
+            var createUrl = base + encodeURIComponent(projectName) + '/_apis/wit/workitems/$' + encodeURIComponent(taskTemplate.workItemTypeName) + '?api-version=6.0';
+            var parentUpdateUrl = base + encodeURIComponent(projectName) + '/_apis/wit/workitems/' + workItemId + '?api-version=6.0';
+
+            return Q.when(VSS.getAccessToken()).then(function(tokenObj){
+                var token = (tokenObj && tokenObj.token) ? tokenObj.token : tokenObj; // VSS returns { token }
+                return restJsonPatch(createUrl, token, newWorkItem).then(function(created){
+                    var document = [{
+                        op: 'add',
+                        path: '/relations/-',
+                        value: {
+                            rel: 'System.LinkTypes.Hierarchy-Forward',
+                            url: created && created.url ? created.url : (base + '_apis/wit/workItems/' + (created && created.id ? created.id : '')),
+                            attributes: { isLocked: false }
+                        }
+                    }];
+                    // Do not reload here; defer UI refresh until the entire batch completes
+                    return restJsonPatch(parentUpdateUrl, token, document).then(function(){
+                        return Q.when();
+                    });
+                });
+            });
+        }
+
+        /**
          * Entry point for the form context: resolves current id and creates children.
          * @param {*} service Work Item Form Service instance.
          */
@@ -368,9 +401,10 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                                                 // Create sequentially to avoid relation/save races
                                                 var chain = Q.when();
                                                 var createStart = Date.now();
+                                                var createFn = USE_REST_CREATE ? createWorkItemViaRest : createWorkItem;
                                                 toCreate.forEach(function(taskTemplate){
                                                     chain = chain.then(function(){
-                                                        return createWorkItem(service, currentWorkItem, taskTemplate, teamSettings).catch(function(err){
+                                                        return createFn(service, currentWorkItem, taskTemplate, teamSettings).catch(function(err){
                                                             if (LOG_ENABLED) {
                                                                 var msg = (err && (err.message || err.statusText)) ? (err.message || err.statusText) : (typeof err === 'string' ? err : JSON.stringify(err));
                                                                 writeLog('Failed to create child from template "' + getTemplateName(taskTemplate) + '": ' + msg);
@@ -381,6 +415,12 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                                                 });
                                                 return chain.then(function(){
                                                     logSinceInit('Child creation completed', createStart);
+                                                    // For REST path in grid context, refresh once at the end
+                                                    if (USE_REST_CREATE && service == null) {
+                                                        return VSS.getService(VSS.ServiceIds.Navigation).then(function (navigationService) {
+                                                            navigationService.reload();
+                                                        });
+                                                    }
                                                 });
                                             });
 
@@ -845,7 +885,6 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
         return {
 
             create: function (context) {
-                loadEnvLoggingFlag();
                 INIT_TS = Date.now();
                 writeLog('init');
                 logSinceInit('Init started');
