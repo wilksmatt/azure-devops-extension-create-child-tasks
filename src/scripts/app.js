@@ -3,8 +3,8 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
 
         var ctx = null;
         var INIT_TS = null; // timestamp when create() starts
-        var LOG_ENABLED = true; // set via configs/dev.json (perfLogs)
-        var USE_REST_CREATE = true; // set via configs/dev.json (useRestCreate)
+        var LOG_ENABLED = true; // Enables logging
+        var USE_REST_CREATE = true; // Enabled work item creation via direct REST calls instead of Work Item Form Service
 
         // ===== Startup & Logging =====
 
@@ -405,10 +405,8 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                                                 toCreate.forEach(function(taskTemplate){
                                                     chain = chain.then(function(){
                                                         return createFn(service, currentWorkItem, taskTemplate, teamSettings).catch(function(err){
-                                                            if (LOG_ENABLED) {
-                                                                var msg = (err && (err.message || err.statusText)) ? (err.message || err.statusText) : (typeof err === 'string' ? err : JSON.stringify(err));
-                                                                writeLog('Failed to create child from template "' + getTemplateName(taskTemplate) + '": ' + msg);
-                                                            }
+                                                            var msg = (err && (err.message || err.statusText)) ? (err.message || err.statusText) : (typeof err === 'string' ? err : JSON.stringify(err));
+                                                            writeLog('Failed to create child from template "' + getTemplateName(taskTemplate) + '": ' + msg);
                                                             return Q.when();
                                                         });
                                                     });
@@ -829,16 +827,14 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                         attempts++;
                         lastError = (e && e.message) ? e.message : e;
                         if (attempts >= MAX_ATTEMPTS) {
-                            if (LOG_ENABLED) {
-                                writeLog('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts (cap). Last error: ' + lastError);
-                            }
+                            writeLog('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts (cap). Last error: ' + lastError);
                             return null;
                         }
                     }
                 }
             }
 
-            if (attempts > 0 && LOG_ENABLED) {
+            if (attempts > 0) {
                 writeLog('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts. Last error: ' + lastError);
             }
             return null;
