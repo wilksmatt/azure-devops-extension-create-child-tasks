@@ -12,7 +12,7 @@ See the full feature walkthrough, configuration tips, and examples in the extens
 
 ### Prerequisites
 
-- Node.js 16.x and npm (recommended for TFX/VSS SDK compatibility)
+- Node.js 16.x and npm
     - Check: `node -v`, `npm -v`
 - Global tools: `npm install -g grunt-cli tfx-cli`
 - Azure DevOps organization with permission to install extensions
