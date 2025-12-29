@@ -44,77 +44,79 @@
     grunt.loadNpmTasks("grunt-contrib-copy");
     grunt.loadNpmTasks('grunt-contrib-clean');
 
-    // Default task(s)
+    // Package tasks
     grunt.registerTask("package-dev", ["exec:package_dev"]);
     grunt.registerTask("package-release", ["exec:package_release"]);
     grunt.registerTask("package-release-test", ["exec:package_release_test"]);
 
-    // Custom publish task with interactive PAT input if not set in env
-    grunt.registerTask('publish-dev', 'Publish Azure DevOps extension', function () {
-        const done = this.async();
-        const exec = require('child_process').exec;
+    // Publish tasks using shared factory
+    grunt.registerTask('publish-dev', 'Publish Azure DevOps extension', createPublishTask('configs/dev.json', 'dev'));
+    grunt.registerTask('publish-release-test', 'Publish Azure DevOps extension (release-test)', createPublishTask('configs/release-test.json', 'release-test'));
 
-        // Helper to run the command
-        const runPublish = (token) => {
-            const cmd = [
-                'tfx extension publish',
-                '--service-url https://marketplace.visualstudio.com',
-                '--manifests vss-extension.json',
-                '--overrides-file configs/dev.json',
-                '--output-path ../dist',
-                `--token ${token}`
-            ].join(' ');
+    // Shared factory to create publish tasks (DRY)
+    function createPublishTask(overridesFile, label) {
+        return function () {
+            const done = this.async();
+            const exec = require('child_process').exec;
 
-            grunt.log.writeln('🚀 Publishing extension...');
-            exec(cmd, (err, stdout, stderr) => {
-                if (err) {
-                    grunt.log.error(stderr || err);
-                    done(false);
-                } else {
-                    grunt.log.ok(stdout);
-                    done();
-                }
-            });
-        };
+            const runPublish = (token) => {
+                const cmd = [
+                    'tfx extension publish',
+                    '--service-url https://marketplace.visualstudio.com',
+                    '--manifests vss-extension.json',
+                    `--overrides-file ${overridesFile}`,
+                    '--output-path ../dist',
+                    `--token ${token}`
+                ].join(' ');
 
-        // Check for existing token
-        let token = process.env.TFS_PERSONAL_ACCESS_TOKEN;
+                const suffix = label ? ` (${label})` : '';
+                grunt.log.writeln(`🚀 Publishing extension${suffix}...`);
+                exec(cmd, (err, stdout, stderr) => {
+                    if (err) {
+                        grunt.log.error(stderr || err);
+                        done(false);
+                    } else {
+                        grunt.log.ok(stdout);
+                        done();
+                    }
+                });
+            };
 
-        if (token) {
-            runPublish(token);
-            return;
-        }
-
-        // No token in env → prompt user interactively
-        const rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-        });
-
-        rl.question('Enter your Personal Access Token (PAT): ', (inputToken) => {
-            rl.close();
-            token = inputToken.trim();
-
-            if (!token) {
-                grunt.fail.warn('❌ No token entered. Aborting.');
-                return done(false);
+            let token = process.env.TFS_PERSONAL_ACCESS_TOKEN;
+            if (token) {
+                runPublish(token);
+                return;
             }
 
-            // Ask to save token to .env for future runs
-            rl.pause();
-            const saveEnv = readline.createInterface({
+            const rl = readline.createInterface({
                 input: process.stdin,
                 output: process.stdout,
             });
 
-            saveEnv.question('💾 Save token to .env for future runs? (y/n): ', (answer) => {
-                if (answer.trim().toLowerCase() === 'y') {
-                    fs.appendFileSync('.env', `\nTFS_PERSONAL_ACCESS_TOKEN=${token}\n`);
-                    grunt.log.ok('Token saved to .env.');
+            rl.question('Enter your Personal Access Token (PAT): ', (inputToken) => {
+                rl.close();
+                token = inputToken.trim();
+
+                if (!token) {
+                    grunt.fail.warn('❌ No token entered. Aborting.');
+                    return done(false);
                 }
-                saveEnv.close();
-                runPublish(token);
+
+                rl.pause();
+                const saveEnv = readline.createInterface({
+                    input: process.stdin,
+                    output: process.stdout,
+                });
+
+                saveEnv.question('💾 Save token to .env for future runs? (y/n): ', (answer) => {
+                    if (answer.trim().toLowerCase() === 'y') {
+                        fs.appendFileSync('.env', `\nTFS_PERSONAL_ACCESS_TOKEN=${token}\n`);
+                        grunt.log.ok('Token saved to .env.');
+                    }
+                    saveEnv.close();
+                    runPublish(token);
+                });
             });
-        });
-    });
+        };
+    }
 };
