@@ -284,3 +284,4 @@ dist/
 
 # Environment files
 .env
+*.code-workspace
