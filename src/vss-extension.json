@@ -71,7 +71,7 @@
             "addressable": true
         },
         {
-            "path": "scripts/app.js",
+            "path": "scripts",
             "addressable": true
         },
         {

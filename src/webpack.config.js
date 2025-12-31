@@ -9,7 +9,6 @@
  */
 
 const { resolve: _resolve } = require('path');
-const webpack = require('webpack');
 
 /** @type {import('webpack').Configuration | import('webpack').ConfigurationFactory} */
 module.exports = (env, argv) => {

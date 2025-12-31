@@ -285,3 +285,6 @@ dist/
 # Environment files
 .env
 *.code-workspace
+
+# Webpack bundles (not checked in)
+src/bundled/

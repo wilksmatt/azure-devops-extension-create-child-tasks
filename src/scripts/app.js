@@ -1,31 +1,7 @@
-define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS/Work/RestClient", "q", "VSS/Controls", "VSS/Controls/StatusIndicator", "VSS/Controls/Dialogs"],
-    function (_WorkItemServices, _WorkItemRestClient, workRestClient, Q, Controls, StatusIndicator, Dialogs) {
+define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS/Work/RestClient", "q", "VSS/Controls", "VSS/Controls/StatusIndicator", "VSS/Controls/Dialogs", "./logger", "./config"],
+    function (_WorkItemServices, _WorkItemRestClient, workRestClient, Q, Controls, StatusIndicator, Dialogs, Logger, Config) {
 
         var ctx = null;
-        var INIT_TS = null; // timestamp when create() starts
-        var LOG_ENABLED = true; // Enables logging
-        var USE_REST_CREATE = true; // Enabled work item creation via direct REST calls instead of Work Item Form Service
-
-        // ===== Startup & Logging =====
-
-        /**
-         * Logs a checkpoint with elapsed time since init and optional phase duration.
-         * Uses `INIT_TS` as the start; if `startTsOptional` is provided, also logs phase ms.
-         * Output is gated by `LOG_ENABLED` via `WriteLog`.
-         * @param {string} label Human-friendly label for the checkpoint.
-         * @param {number} [startTsOptional] Optional phase start timestamp (ms since epoch).
-         * @returns {void}
-         */
-        function logSinceInit(label, startTsOptional) {
-            var now = Date.now();
-            var sinceInit = INIT_TS ? (now - INIT_TS) : 0;
-            if (typeof startTsOptional === 'number') {
-                var phaseMs = now - startTsOptional;
-                writeLog(label + ' in ' + phaseMs + ' ms (since init: ' + sinceInit + ' ms)');
-            } else {
-                writeLog(label + ' (since init: ' + sinceInit + ' ms)');
-            }
-        }
 
         // ===== REST Helpers =====
 
@@ -52,15 +28,6 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                     xhr.send(JSON.stringify(patchOps));
                 } catch (e) { reject(e); }
             });
-        }
-
-        /**
-         * Writes a namespaced log message when perf logging is enabled.
-         * @param {string} msg Message to log.
-         */
-        function writeLog(msg) {
-            if (!LOG_ENABLED) return;
-            console.log('Create Child Tasks: ' + msg);
         }
 
         // ===== Entry Points =====
@@ -173,10 +140,10 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             } else if (taskTemplate.fields['System.IterationPath'].toLowerCase() == '@currentiteration') {
                 // Check that teamSettings.defaultIteration is not null and has a path
                 if (teamSettings && teamSettings.defaultIteration && teamSettings.defaultIteration.path) {
-                    writeLog('Info: Creating work item (template: ' + getTemplateName(taskTemplate) + ') with team default iteration path.');
+                    Logger.info('Creating work item (template: ' + getTemplateName(taskTemplate) + ') with team default iteration path.');
                     workItem.push({ "op": "add", "path": "/fields/System.IterationPath", "value": teamSettings.backlogIteration.name + teamSettings.defaultIteration.path })
                 } else {
-                    writeLog('Warning: No default or current iteration path defined in team settings for template ' + getTemplateName(taskTemplate) + '. Falling back to parent iteration path.');
+                    Logger.warn('No default or current iteration path defined in team settings for template ' + getTemplateName(taskTemplate) + '. Falling back to parent iteration path.');
                     workItem.push({ "op": "add", "path": "/fields/System.IterationPath", "value": currentWorkItem['System.IterationPath'] })
                 }
             }
@@ -244,7 +211,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                             });
                         }, function (err) {
                             var msg = (err && (err.message || err.statusText)) ? (err.message || err.statusText) : (typeof err === 'string' ? err : JSON.stringify(err));
-                            writeLog('Failed to add relation for template ' + getTemplateName(taskTemplate) + ': ' + msg);
+                            Logger.error('Failed to add relation for template ' + getTemplateName(taskTemplate) + ': ' + msg);
                             // Re-throw to be handled by upstream catch
                             throw err;
                         });
@@ -350,12 +317,12 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             var teamSettingsStart = Date.now();
             workClient.getTeamSettings(team)
                 .then(function (teamSettings) {
-                    logSinceInit('Team settings resolved', teamSettingsStart);
+                    Logger.timestamp('Team settings resolved', teamSettingsStart);
                     // Get the current values for a few of the common fields
                     var wiStart = Date.now();
                     witClient.getWorkItem(workItemId)
                         .then(function (value) {
-                            logSinceInit('Fetched current work item', wiStart);
+                            Logger.timestamp('Fetched current work item', wiStart);
                             var currentWorkItem = value.fields;
 
                             currentWorkItem['System.Id'] = workItemId;
@@ -364,14 +331,14 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                             var childTypesStart = Date.now();
                             getChildTypes(witClient, workItemType)
                                 .then(function (childTypes) {
-                                    logSinceInit('Resolved valid child types', childTypesStart);
+                                    Logger.timestamp('Resolved valid child types', childTypesStart);
                                     if (childTypes == null)
                                         return;
                                     // get Templates
                                     var tmplFetchStart = Date.now();
                                     getTemplates(childTypes)
                                         .then(function (response) {
-                                            logSinceInit('Templates fetched', tmplFetchStart);
+                                            Logger.timestamp('Templates fetched', tmplFetchStart);
                                             if (response.length == 0) {
                                                 showDialog('No ' + childTypes + ' templates found. Please add ' + childTypes + ' templates for the project team.');
                                                 return;
@@ -379,12 +346,12 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                                             // Create children alphabetically.
                                             var sortStart = Date.now();
                                             var templates = response.sort(sortTemplates);
-                                            logSinceInit('Templates sorted (' + templates.length + ')', sortStart);
+                                            Logger.timestamp('Templates sorted (' + templates.length + ')', sortStart);
                                             // Prefetch all template details in parallel, then filter and create sequentially
                                             var detailFetchStart = Date.now();
                                             var detailPromises = templates.map(function(t){ return getTemplate(t.id).then(function(dt){ return dt; }, function(){ return null; }); });
                                             return Q.all(detailPromises).then(function(details){
-                                                logSinceInit('Template details fetched', detailFetchStart);
+                                                Logger.timestamp('Template details fetched', detailFetchStart);
                                                 // Filter templates by rule match using recommended order inside IsValidTemplateWIT
                                                 var toCreate = [];
                                                 for (var i = 0; i < details.length; i++) {
@@ -401,20 +368,19 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                                                 // Create sequentially to avoid relation/save races
                                                 var chain = Q.when();
                                                 var createStart = Date.now();
-                                                var createFn = USE_REST_CREATE ? createWorkItemViaRest : createWorkItem;
                                                 toCreate.forEach(function(taskTemplate){
                                                     chain = chain.then(function(){
-                                                        return createFn(service, currentWorkItem, taskTemplate, teamSettings).catch(function(err){
+                                                        return createWorkItemViaRest(service, currentWorkItem, taskTemplate, teamSettings).catch(function(err){
                                                             var msg = (err && (err.message || err.statusText)) ? (err.message || err.statusText) : (typeof err === 'string' ? err : JSON.stringify(err));
-                                                            writeLog('Failed to create child from template "' + getTemplateName(taskTemplate) + '": ' + msg);
+                                                            Logger.error('Failed to create child from template "' + getTemplateName(taskTemplate) + '": ' + msg);
                                                             return Q.when();
                                                         });
                                                     });
                                                 });
                                                 return chain.then(function(){
-                                                    logSinceInit('Child creation completed', createStart);
+                                                    Logger.timestamp('Child creation completed', createStart);
                                                     // For REST path in grid context, refresh once at the end
-                                                    if (USE_REST_CREATE && service == null) {
+                                                    if (service == null) {
                                                         return VSS.getService(VSS.ServiceIds.Navigation).then(function (navigationService) {
                                                             navigationService.reload();
                                                         });
@@ -520,7 +486,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                         return true;
                     } catch (e) {
                         // If a single rule is malformed, skip it instead of throwing
-                        writeLog('Skipping malformed filter rule: ' + (e && e.message ? e.message : e));
+                        Logger.warn('Skipping malformed filter rule: ' + (e && e.message ? e.message : e));
                         return false;
                     }
                 });
@@ -827,7 +793,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                         attempts++;
                         lastError = (e && e.message) ? e.message : e;
                         if (attempts >= MAX_ATTEMPTS) {
-                            writeLog('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts (cap). Last error: ' + lastError);
+                            Logger.warn('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts (cap). Last error: ' + lastError);
                             return null;
                         }
                     }
@@ -835,7 +801,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             }
 
             if (attempts > 0) {
-                writeLog('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts. Last error: ' + lastError);
+                Logger.warn('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts. Last error: ' + lastError);
             }
             return null;
         }
@@ -881,9 +847,11 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
         return {
 
             create: function (context) {
-                INIT_TS = Date.now();
-                writeLog('init');
-                logSinceInit('Init started');
+                // Initialize logger with explicit runtime mode from config
+                try { Logger.init(Config && Config.mode ? Config.mode : undefined); } catch (e) { /* ignore */ }
+                Logger.timestamp.setInit(Date.now());
+                Logger.debug('init');
+                Logger.timestamp('Init started');
 
                 ctx = VSS.getWebContext();
 
@@ -892,21 +860,21 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                         .then(function success(response) {
                             if (response == true) {
                                 //form is open
-                                logSinceInit('Form detected');
+                                Logger.timestamp('Form detected');
                                 addTasksOnForm(service);
                             }
                             else {
                                 // on grid
                                 if (context.workItemIds && context.workItemIds.length > 0) {
 
-                                    logSinceInit('Grid detected: ' + context.workItemIds.length + ' ids');
+                                    Logger.timestamp('Grid detected: ' + context.workItemIds.length + ' ids');
                                     context.workItemIds.forEach(function (workItemId) {
                                         addTasksOnGrid(workItemId);
                                     });
                                 }
                                 else if (context.id) {
                                     var workItemId = context.id;
-                                    logSinceInit('Grid detected: single id');
+                                    Logger.timestamp('Grid detected: single id');
                                     addTasksOnGrid(workItemId);
                                 }
                             }
