@@ -3,7 +3,7 @@ define([], function(){
     // Explicit mode only. Options: 'dev' | 'release'
     // Change the value below to set logging mode.
 
-    var mode = 'release';
+    var mode = 'dev';
 
     return {
         mode: mode
