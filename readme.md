@@ -117,6 +117,24 @@ npm run serve
 - Trust HTTPS cert: open `https://localhost:3000` once and accept the certificate
 - Stop webpack dev server: Ctrl+C; or kill by port 3000 (`lsof -nP -iTCP:3000 -sTCP:LISTEN` then `kill <PID>`)
 
+### SDK vs REST usage
+
+To balance performance and reliability (especially on Chromium), the extension uses both Azure DevOps SDK clients and direct REST calls.
+
+#### SDK (Azure DevOps clients)
+- Templates (list + details): `WorkItemTrackingRestClient.getTemplates(...)`, `getTemplate(...)`
+- Team settings (bug behavior, iterations): `WorkRestClient.getTeamSettings(...)`
+- Form context detection: `WorkItemFormService` (creation/linking still done via REST)
+- UI services (dialogs, navigation): `VSS.getService(...)` (`Dialog`, `Navigation`)
+
+#### REST (direct HTTP)
+- Work item fetch: `Rest.getWorkItem(id, fields)`
+- Child work item creation: `Rest.createChildWorkItem(parentWorkItem, template, teamSettings, patchOps)`
+- Relation update (link to parent): part of `Rest.createChildWorkItem` via JSON Patch
+- HTTP helpers: `Rest.getJson(url, token)`, `Rest.patchJson(url, token, ops)`
+
+This split avoids slower iframe messaging for creation while keeping higher-level SDK helpers where they’re stable and convenient.
+
 ## Credits ##
 
 Cloned from https://github.com/figueiredorui/1-click-child-links

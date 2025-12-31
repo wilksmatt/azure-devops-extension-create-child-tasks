@@ -260,16 +260,31 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                     Logger.timestamp('Team settings resolved', teamSettingsStart);
                     // Get the current values for a few of the common fields
                     var wiStart = Date.now();
-                    witClient.getWorkItem(workItemId)
+                    // Prefer REST over SDK for better Chromium performance
+                    Rest.getWorkItem(workItemId, [
+                        'System.Id',
+                        'System.WorkItemType',
+                        'System.State',
+                        'System.AreaPath',
+                        'System.IterationPath',
+                        'System.BoardColumn',
+                        'System.BoardLane',
+                        'System.Title',
+                        'System.Tags'
+                    ])
                         .then(function (value) {
                             Logger.timestamp('Fetched current work item', wiStart);
+                            if (!value || !value.fields) {
+                                // Proceed without extra debug; downstream will fail if fields are missing
+                                throw new Error('Failed to load work item via REST');
+                            }
                             var currentWorkItem = value.fields;
 
                             currentWorkItem['System.Id'] = workItemId;
 
                             var workItemType = currentWorkItem["System.WorkItemType"];
                             var childTypesStart = Date.now();
-                            getChildTypes(witClient, workItemType)
+                            getChildTypes(witClient, workItemType, teamSettings)
                                 .then(function (childTypes) {
                                     Logger.timestamp('Resolved valid child types', childTypesStart);
                                     if (childTypes == null)
@@ -305,13 +320,14 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                                                         // Skip malformed templates silently
                                                     }
                                                 }
+                                                
                                                 // Create sequentially to avoid relation/save races
                                                 var chain = Q.when();
                                                 var createStart = Date.now();
                                                 toCreate.forEach(function(taskTemplate){
                                                     chain = chain.then(function(){
                                                         var newWorkItem = createWorkItemFromTemplate(currentWorkItem, taskTemplate, teamSettings);
-                                                        return Rest.createWorkItemViaRest(service, currentWorkItem, taskTemplate, teamSettings, newWorkItem).catch(function(err){
+                                                        return Rest.createChildWorkItem(service, currentWorkItem, taskTemplate, teamSettings, newWorkItem).catch(function(err){
                                                             var msg = (err && (err.message || err.statusText)) ? (err.message || err.statusText) : (typeof err === 'string' ? err : JSON.stringify(err));
                                                             Logger.error('Failed to create child from template "' + getTemplateName(taskTemplate) + '": ' + msg);
                                                             return Q.when();
@@ -328,11 +344,10 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                                                     }
                                                 });
                                             });
-
                                         });
                                 });
-                        })
-                })
+                        });
+                });
         }
 
         // ===== Data Fetching =====
@@ -577,7 +592,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
          * @returns {*} Matching category or undefined.
          */
         function findWorkTypeCategory(categories, workItemType) {
-            for (category of categories) {
+            for (var category of categories) {
                 var found = category.workItemTypes.find(function (w) { return w.name == workItemType; });
                 if (found != null) {
                     return category;
@@ -591,23 +606,16 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
          * @param {string} workItemType Parent work item type.
          * @returns {Promise<string[]>} Array of child type names.
          */
-        function getChildTypes(witClient, workItemType) {
+        function getChildTypes(witClient, workItemType, teamSettings) {
 
             return witClient.getWorkItemTypeCategories(VSS.getWebContext().project.name)
                 .then(function (response) {
                     var categories = response;
                     var category = findWorkTypeCategory(categories, workItemType);
 
-                    if (category !== null) {
+                    if (category != null) {
                         var requests = [];
-                        var workClient = workRestClient.getClient();
-
-                        var team = {
-                            projectId: ctx.project.id,
-                            teamId: ctx.team.id
-                        };
-
-                        bugsBehavior = workClient.getTeamSettings(team).bugsBehavior; //Off, AsTasks, AsRequirements
+                        var bugsBehavior = (teamSettings && teamSettings.bugsBehavior) || 'Off'; // Off, AsTasks, AsRequirements
 
                         if (category.referenceName === 'Microsoft.EpicCategory') {
                             return witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.FeatureCategory')
