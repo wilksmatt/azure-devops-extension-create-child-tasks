@@ -139,83 +139,6 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
         }
 
         /**
-         * Creates a child work item, links it to the parent, and saves changes.
-         * Uses Work Item Form Service when available; falls back to REST update.
-         * @param {*} service Work Item Form Service instance or null.
-         * @param {*} currentWorkItem Parent work item fields map.
-         * @param {*} taskTemplate Template object used to build the child.
-         * @param {*} teamSettings Team settings used for iteration resolution.
-         * @returns {Promise} Resolves after creation and relation save.
-         */
-        function createWorkItem(service, currentWorkItem, taskTemplate, teamSettings) {
-
-            var witClient = _WorkItemRestClient.getClient();
-
-            var newWorkItem = createWorkItemFromTemplate(currentWorkItem, taskTemplate, teamSettings);
-
-            return witClient.createWorkItem(newWorkItem, VSS.getWebContext().project.name, taskTemplate.workItemTypeName)
-                .then(function (created) {
-                    // Add relation to the parent and then save the parent form
-                    if (service != null) {
-                        // Wrap addWorkItemRelations to normalize return type (some SDKs don't support .catch)
-                        return Q.Promise(function (resolve, reject) {
-                            try {
-                                var relResult = service.addWorkItemRelations([
-                                    { rel: "System.LinkTypes.Hierarchy-Forward", url: created.url }
-                                ]);
-                                if (relResult && typeof relResult.then === 'function') {
-                                    // Use then(success, error) to support jQuery/Q-style promises
-                                    relResult.then(function () { resolve(); }, function (e) { reject(e); });
-                                } else {
-                                    // Synchronous/no promise
-                                    resolve();
-                                }
-                            } catch (e) {
-                                reject(e);
-                            }
-                        }).then(function () {
-                            // Prefer save() which returns a promise to avoid race conditions on first run
-                            if (typeof service.save === 'function') {
-                                return service.save();
-                            }
-                            // Fallback to beginSaveWorkItem if save() is not available
-                            return Q.Promise(function (resolve, reject) {
-                                try {
-                                    service.beginSaveWorkItem(function () { resolve(); }, function (error) { reject(error); });
-                                } catch (e) { reject(e); }
-                            });
-                        }, function (err) {
-                            var msg = (err && (err.message || err.statusText)) ? (err.message || err.statusText) : (typeof err === 'string' ? err : JSON.stringify(err));
-                            Logger.error('Failed to add relation for template ' + getTemplateName(taskTemplate) + ': ' + msg);
-                            // Re-throw to be handled by upstream catch
-                            throw err;
-                        });
-                    } else {
-                        // Save using REST client by updating relations on the parent work item
-                        var workItemId = currentWorkItem['System.Id'];
-                        var document = [{
-                            op: "add",
-                            path: '/relations/-',
-                            value: {
-                                rel: "System.LinkTypes.Hierarchy-Forward",
-                                url: created.url,
-                                attributes: {
-                                    isLocked: false,
-                                }
-                            }
-                        }];
-
-                        return witClient.updateWorkItem(document, workItemId)
-                            .then(function () {
-                                VSS.getService(VSS.ServiceIds.Navigation).then(function (navigationService) {
-                                    navigationService.reload();
-                                });
-                            });
-                    }
-                });
-        }
-
-        /**
          * Entry point for the form context: resolves current id and creates children.
          * @param {*} service Work Item Form Service instance.
          */
@@ -261,7 +184,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                     // Get the current values for a few of the common fields
                     var wiStart = Date.now();
                     // Prefer REST over SDK for better Chromium performance
-                    Rest.getWorkItem(workItemId, [
+                        return Rest.getWorkItem(workItemId, [
                         'System.Id',
                         'System.WorkItemType',
                         'System.State',
@@ -327,7 +250,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                                                 toCreate.forEach(function(taskTemplate){
                                                     chain = chain.then(function(){
                                                         var newWorkItem = createWorkItemFromTemplate(currentWorkItem, taskTemplate, teamSettings);
-                                                        return Rest.createChildWorkItem(service, currentWorkItem, taskTemplate, teamSettings, newWorkItem).catch(function(err){
+                                                           return Rest.createChildWorkItem(currentWorkItem, taskTemplate, newWorkItem).catch(function(err){
                                                             var msg = (err && (err.message || err.statusText)) ? (err.message || err.statusText) : (typeof err === 'string' ? err : JSON.stringify(err));
                                                             Logger.error('Failed to create child from template "' + getTemplateName(taskTemplate) + '": ' + msg);
                                                             return Q.when();

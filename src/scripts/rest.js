@@ -102,14 +102,12 @@ define(["q"], function (Q) {
     /**
      * Create a child work item and link it to the parent.
      * Note: expects the caller to supply the already-built JSON patch for the child (newWorkItem).
-     * @param {*} service - Work Item Form Service instance or null.
      * @param {Object} currentWorkItem - Parent work item fields map.
      * @param {Object} taskTemplate - Template definition with fields and metadata.
-     * @param {Object} teamSettings - Team settings (included for parity; not used in this function).
      * @param {Array<object>} newWorkItem - JSON Patch operations for work item creation.
      * @returns {Promise<void>} Resolves after create and link operations complete.
      */
-    function createChildWorkItem(service, currentWorkItem, taskTemplate, teamSettings, newWorkItem) {
+    function createChildWorkItem(currentWorkItem, taskTemplate, newWorkItem) {
         var ctx = getContextInfo();
         var workItemId = currentWorkItem['System.Id'];
         var createUrl = ctx.base + encodeURIComponent(ctx.projectName) + '/_apis/wit/workitems/$' + encodeURIComponent(taskTemplate.workItemTypeName) + '?api-version=6.0';

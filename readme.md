@@ -129,7 +129,7 @@ To balance performance and reliability (especially on Chromium), the extension u
 
 #### REST (direct HTTP)
 - Work item fetch: `Rest.getWorkItem(id, fields)`
-- Child work item creation: `Rest.createChildWorkItem(parentWorkItem, template, teamSettings, patchOps)`
+- Child work item creation: `Rest.createChildWorkItem(parentWorkItem, template, patchOps)`
 - Relation update (link to parent): part of `Rest.createChildWorkItem` via JSON Patch
 - HTTP helpers: `Rest.getJson(url, token)`, `Rest.patchJson(url, token, ops)`
 
