@@ -203,11 +203,40 @@ define(["q"], function (Q) {
         });
     }
 
+    /**
+     * Fetch all work item type categories for the current project via REST.
+     * @returns {Promise<Array<object>>} Array of category objects.
+     */
+    function getWorkItemTypeCategories() {
+        var ctx = getContextInfo();
+        var url = ctx.base + encodeURIComponent(ctx.projectName) + '/_apis/wit/workitemtypecategories?api-version=6.0';
+        return getAccessTokenString().then(function (token) {
+            return getJson(url, token).then(function (payload) {
+                return (payload && payload.value) ? payload.value : [];
+            });
+        });
+    }
+
+    /**
+     * Fetch a single work item type category by reference name via REST.
+     * @param {string} referenceName e.g., 'Microsoft.TaskCategory'.
+     * @returns {Promise<object>} Category object including 'workItemTypes'.
+     */
+    function getWorkItemTypeCategory(referenceName) {
+        var ctx = getContextInfo();
+        var url = ctx.base + encodeURIComponent(ctx.projectName) + '/_apis/wit/workitemtypecategories/' + encodeURIComponent(referenceName) + '?api-version=6.0';
+        return getAccessTokenString().then(function (token) {
+            return getJson(url, token);
+        });
+    }
+
     return {
         patchJson: patchJson,
         getJson: getJson,
         createChildWorkItem: createChildWorkItem,
         getWorkItem: getWorkItem,
-        getTeamSettings: getTeamSettings
+        getTeamSettings: getTeamSettings,
+        getWorkItemTypeCategories: getWorkItemTypeCategories,
+        getWorkItemTypeCategory: getWorkItemTypeCategory
     };
 });

@@ -169,13 +169,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
          */
         function addTasks(workItemId, service) {
 
-            var witClient = _WorkItemRestClient.getClient();
-            var workClient = workRestClient.getClient();
-
-            var team = {
-                projectId: ctx.project.id,
-                teamId: ctx.team.id
-            };
+            // SDK clients no longer required here after REST migration
 
             var teamSettingsStart = Date.now();
             Rest.getTeamSettings()
@@ -207,7 +201,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
 
                             var workItemType = currentWorkItem["System.WorkItemType"];
                             var childTypesStart = Date.now();
-                            getChildTypes(witClient, workItemType, teamSettings)
+                            getChildTypes(workItemType, teamSettings)
                                 .then(function (childTypes) {
                                     Logger.timestamp('Resolved valid child types', childTypesStart);
                                     if (childTypes == null)
@@ -529,9 +523,9 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
          * @param {string} workItemType Parent work item type.
          * @returns {Promise<string[]>} Array of child type names.
          */
-        function getChildTypes(witClient, workItemType, teamSettings) {
+        function getChildTypes(workItemType, teamSettings) {
 
-            return witClient.getWorkItemTypeCategories(VSS.getWebContext().project.name)
+            return Rest.getWorkItemTypeCategories()
                 .then(function (response) {
                     var categories = response;
                     var category = findWorkTypeCategory(categories, workItemType);
@@ -541,24 +535,24 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                         var bugsBehavior = (teamSettings && teamSettings.bugsBehavior) || 'Off'; // Off, AsTasks, AsRequirements
 
                         if (category.referenceName === 'Microsoft.EpicCategory') {
-                            return witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.FeatureCategory')
+                            return Rest.getWorkItemTypeCategory('Microsoft.FeatureCategory')
                                 .then(function (response) {
                                     var category = response;
 
                                     return category.workItemTypes.map(function (item) { return item.name; });
                                 });
                         } else if (category.referenceName === 'Microsoft.FeatureCategory') {
-                            requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.RequirementCategory'));
-                            if (bugsBehavior === 'AsRequirements') { requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.BugCategory')); }
+                            requests.push(Rest.getWorkItemTypeCategory('Microsoft.RequirementCategory'));
+                            if (bugsBehavior === 'AsRequirements') { requests.push(Rest.getWorkItemTypeCategory('Microsoft.BugCategory')); }
                         } else if (category.referenceName === 'Microsoft.RequirementCategory') {
-                            requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.TaskCategory'));
-                            if (bugsBehavior === 'AsTasks') { requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.BugCategory')); }
+                            requests.push(Rest.getWorkItemTypeCategory('Microsoft.TaskCategory'));
+                            if (bugsBehavior === 'AsTasks') { requests.push(Rest.getWorkItemTypeCategory('Microsoft.BugCategory')); }
                         } else if (category.referenceName === 'Microsoft.BugCategory' && bugsBehavior === 'AsRequirements') {
-                            requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.TaskCategory'));
+                            requests.push(Rest.getWorkItemTypeCategory('Microsoft.TaskCategory'));
                         } else if (category.referenceName === 'Microsoft.TaskCategory') {
-                            requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.TaskCategory'));
+                            requests.push(Rest.getWorkItemTypeCategory('Microsoft.TaskCategory'));
                         } else if (category.referenceName == 'Microsoft.BugCategory') {
-                            requests.push(witClient.getWorkItemTypeCategory(VSS.getWebContext().project.name, 'Microsoft.TaskCategory'));
+                            requests.push(Rest.getWorkItemTypeCategory('Microsoft.TaskCategory'));
                         }
 
                         return Q.all(requests)
