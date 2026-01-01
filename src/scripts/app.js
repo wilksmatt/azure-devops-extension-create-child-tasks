@@ -178,7 +178,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
             };
 
             var teamSettingsStart = Date.now();
-            workClient.getTeamSettings(team)
+            Rest.getTeamSettings()
                 .then(function (teamSettings) {
                     Logger.timestamp('Team settings resolved', teamSettingsStart);
                     // Get the current values for a few of the common fields

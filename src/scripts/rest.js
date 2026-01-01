@@ -150,10 +150,64 @@ define(["q"], function (Q) {
         });
     }
 
+    /**
+     * Fetch team settings via REST for the current project/team.
+     * Augments the payload with `defaultIteration.path` derived from team iterations for compatibility.
+     * @returns {Promise<object>} Team settings object (bugsBehavior, backlogIteration, defaultIteration with path).
+     */
+    function getTeamSettings() {
+        var ctx = getContextInfo();
+        var wc = VSS.getWebContext();
+        var teamIdOrName = (wc && wc.team && (wc.team.id || wc.team.name)) || '';
+        var settingsUrl = ctx.base + encodeURIComponent(ctx.projectName) + '/' + encodeURIComponent(teamIdOrName) + '/_apis/work/teamsettings?api-version=6.0';
+        var iterationsUrl = ctx.base + encodeURIComponent(ctx.projectName) + '/' + encodeURIComponent(teamIdOrName) + '/_apis/work/teamsettings/iterations?api-version=6.0';
+
+        return getAccessTokenString().then(function (token) {
+            return getJson(settingsUrl, token).then(function (settings) {
+                // Derive default iteration path for compatibility with existing logic
+                return getJson(iterationsUrl, token).then(function (iters) {
+                    try {
+                        var list = (iters && iters.value) ? iters.value : [];
+                        var defId = settings && settings.defaultIteration && settings.defaultIteration.id;
+                        var match = null;
+                        for (var i = 0; i < list.length; i++) {
+                            if (list[i] && list[i].id === defId) { match = list[i]; break; }
+                        }
+                        if (match && match.path) {
+                            var fullPath = match.path; // e.g., 'ProjectName\\Iteration\\Sprint 1'
+                            var projectName = (wc && wc.project && wc.project.name) ? wc.project.name : '';
+                            var backlogName = (settings && settings.backlogIteration && settings.backlogIteration.name) ? settings.backlogIteration.name : projectName;
+                            var relative = fullPath;
+                            // Remove leading project name
+                            if (projectName && relative.indexOf(projectName) === 0) {
+                                relative = relative.substring(projectName.length);
+                            }
+                            // Remove leading backlog name if present
+                            if (backlogName && relative.indexOf(backlogName) === 0) {
+                                relative = relative.substring(backlogName.length);
+                            }
+                            // Ensure leading backslash
+                            relative = relative.replace(/^\\+/, '');
+                            if (relative && relative.charAt(0) !== '\\') {
+                                relative = '\\' + relative;
+                            }
+                            settings.defaultIteration = settings.defaultIteration || {};
+                            settings.defaultIteration.path = relative;
+                        }
+                    } catch (e) {
+                        // If derivation fails, leave path undefined without throwing
+                    }
+                    return settings;
+                });
+            });
+        });
+    }
+
     return {
         patchJson: patchJson,
         getJson: getJson,
         createChildWorkItem: createChildWorkItem,
-        getWorkItem: getWorkItem
+        getWorkItem: getWorkItem,
+        getTeamSettings: getTeamSettings
     };
 });

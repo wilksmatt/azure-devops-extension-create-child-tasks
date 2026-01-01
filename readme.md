@@ -123,7 +123,7 @@ To balance performance and reliability (especially on Chromium), the extension u
 
 #### SDK (Azure DevOps clients)
 - Templates (list + details): `WorkItemTrackingRestClient.getTemplates(...)`, `getTemplate(...)`
-- Team settings (bug behavior, iterations): `WorkRestClient.getTeamSettings(...)`
+- Team settings (bug behavior, iterations): `Rest.getTeamSettings()`
 - Form context detection: `WorkItemFormService` (creation/linking still done via REST)
 - UI services (dialogs, navigation): `VSS.getService(...)` (`Dialog`, `Navigation`)
 
