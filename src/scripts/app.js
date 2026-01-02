@@ -1,5 +1,5 @@
-define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS/Work/RestClient", "q", "VSS/Controls", "VSS/Controls/StatusIndicator", "VSS/Controls/Dialogs", "./logger", "./config", "./rest"],
-    function (_WorkItemServices, _WorkItemRestClient, workRestClient, Q, Controls, StatusIndicator, Dialogs, Logger, Config, Rest) {
+define(["TFS/WorkItemTracking/Services", "q", "./logger", "./config", "./rest"],
+    function (_WorkItemServices, Q, Logger, Config, Rest) {
 
         var ctx = null;
 
@@ -521,8 +521,8 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
 
         /**
          * Resolves valid child work item types based on the parent type and team bug behavior.
-         * @param {*} witClient Work Item Tracking REST client.
          * @param {string} workItemType Parent work item type.
+         * @param {*} teamSettings Team settings used for bug behavior (Off, AsTasks, AsRequirements).
          * @returns {Promise<string[]>} Array of child type names.
          */
         function getChildTypes(workItemType, teamSettings) {
