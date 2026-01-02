@@ -230,6 +230,49 @@ define(["q"], function (Q) {
         });
     }
 
+    /**
+     * Fetch templates for given work item types via REST and flatten results.
+     * @param {string[]} workItemTypes
+     * @returns {Promise<Array<object>>} Flat array of template summaries (id, name, description, etc.).
+     */
+    function getTemplatesForTypes(workItemTypes) {
+        var ctx = getContextInfo();
+        var wc = VSS.getWebContext();
+        var teamIdOrName = (wc && wc.team && (wc.team.id || wc.team.name)) || '';
+        return getAccessTokenString().then(function (token) {
+            var requests = [];
+            for (var i = 0; i < workItemTypes.length; i++) {
+                var t = workItemTypes[i];
+                var url = ctx.base + encodeURIComponent(ctx.projectName) + '/' + encodeURIComponent(teamIdOrName) + '/_apis/wit/templates?workitemtypename=' + encodeURIComponent(t) + '&api-version=6.0';
+                requests.push(getJson(url, token));
+            }
+            return Q.all(requests).then(function (arrays) {
+                var templates = [];
+                for (var j = 0; j < arrays.length; j++) {
+                    var payload = arrays[j];
+                    var list = (payload && payload.value) ? payload.value : [];
+                    for (var k = 0; k < list.length; k++) templates.push(list[k]);
+                }
+                return templates;
+            });
+        });
+    }
+
+    /**
+     * Fetch a single template detail via REST.
+     * @param {string} id Template ID.
+     * @returns {Promise<object>} Detailed template object (fields, description, name).
+     */
+    function getTemplateDetail(id) {
+        var ctx = getContextInfo();
+        var wc = VSS.getWebContext();
+        var teamIdOrName = (wc && wc.team && (wc.team.id || wc.team.name)) || '';
+        var url = ctx.base + encodeURIComponent(ctx.projectName) + '/' + encodeURIComponent(teamIdOrName) + '/_apis/wit/templates/' + encodeURIComponent(id) + '?api-version=6.0';
+        return getAccessTokenString().then(function (token) {
+            return getJson(url, token);
+        });
+    }
+
     return {
         patchJson: patchJson,
         getJson: getJson,
@@ -237,6 +280,8 @@ define(["q"], function (Q) {
         getWorkItem: getWorkItem,
         getTeamSettings: getTeamSettings,
         getWorkItemTypeCategories: getWorkItemTypeCategories,
-        getWorkItemTypeCategory: getWorkItemTypeCategory
+        getWorkItemTypeCategory: getWorkItemTypeCategory,
+        getTemplatesForTypes: getTemplatesForTypes,
+        getTemplateDetail: getTemplateDetail
     };
 });

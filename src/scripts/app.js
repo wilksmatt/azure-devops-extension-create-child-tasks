@@ -3,8 +3,6 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
 
         var ctx = null;
 
-        // ===== REST Helpers & Functions moved to ./rest =====
-
         // ===== Entry Points =====
 
         /**
@@ -71,7 +69,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
 
             // Iteration through every field in the task template
             for (var key in taskTemplate.fields) {
-                
+
                 // Skip inherited properties early
                 if (!Object.prototype.hasOwnProperty.call(taskTemplate.fields, key)) {
                     continue;
@@ -214,30 +212,55 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
                                     getTemplates(childTypes)
                                         .then(function (response) {
                                             Logger.timestamp('Templates fetched', tmplFetchStart);
+
+                                            // Check for no templates
                                             if (response.length == 0) {
-                                                showDialog('No ' + childTypes + ' templates found. Please add ' + childTypes + ' templates for the project team.');
+                                                Logger.warn('No templates found of type: ' + childTypes + '. Please add templates for this project team.');
+                                                showDialog('No templates found of type: ' + childTypes + '. Please add templates for this project team.');
                                                 return;
                                             }
-                                            // Create children alphabetically.
-                                            var sortStart = Date.now();
-                                            var templates = response.sort(sortTemplates);
-                                            Logger.timestamp('Templates sorted (' + templates.length + ')', sortStart);
-                                            // Prefetch all template details in parallel, then filter and create sequentially
+
+                                            // Initial list without sorting; we'll sort after prefiltering
+                                            var templates = response;
+
+                                            // Prefilter templates by description before fetching details
+                                            var prefilterStart = Date.now();
+                                            var candidates = [];
+                                            for (var i = 0; i < templates.length; i++) {
+                                                var t = templates[i];
+                                                try {
+                                                    if (isValidTemplateWIT(currentWorkItem, t)) {
+                                                        candidates.push(t);
+                                                    }
+                                                } catch (e) {
+                                                    // skip malformed templates
+                                                }
+                                            }
+                                            Logger.timestamp('Templates prefiltered (' + candidates.length + ')', prefilterStart);
+
+                                            // Check whether any candidates remain; if none, log and exit
+                                            if (candidates.length === 0) {
+                                                Logger.warn('No templates matched. Please check your template descriptions and rules.');
+                                                return;
+                                            }
+                                            
+                                            // Sort only the candidates to reduce work
+                                            var sortCandidatesStart = Date.now();
+                                            candidates = candidates.sort(sortTemplates);
+                                            Logger.timestamp('Candidates sorted (' + candidates.length + ')', sortCandidatesStart);
+                                            
+                                            // Prefetch only candidate details in parallel, then create sequentially
                                             var detailFetchStart = Date.now();
-                                            var detailPromises = templates.map(function(t){ return getTemplate(t.id).then(function(dt){ return dt; }, function(){ return null; }); });
+                                            var detailPromises = candidates.map(function(t){ return getTemplate(t.id).then(function(dt){ return dt; }, function(){ return null; }); });
                                             return Q.all(detailPromises).then(function(details){
                                                 Logger.timestamp('Template details fetched', detailFetchStart);
-                                                // Filter templates by rule match using recommended order inside IsValidTemplateWIT
+
+                                                // Use prefiltered candidates: no need to re-check description rules here
                                                 var toCreate = [];
                                                 for (var i = 0; i < details.length; i++) {
                                                     var taskTemplate = details[i];
-                                                    if (!taskTemplate) continue;
-                                                    try {
-                                                        if (isValidTemplateWIT(currentWorkItem, taskTemplate)) {
-                                                            toCreate.push(taskTemplate);
-                                                        }
-                                                    } catch (e) {
-                                                        // Skip malformed templates silently
+                                                    if (taskTemplate) {
+                                                        toCreate.push(taskTemplate);
                                                     }
                                                 }
                                                 
@@ -278,30 +301,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
          * @returns Promise resolving to a flat array of template objects.
          */
         function getTemplates(workItemTypes) {
-
-            var requests = []
-            var witClient = _WorkItemRestClient.getClient();
-
-            workItemTypes.forEach(function (workItemType) {
-
-                var request = witClient.getTemplates(ctx.project.id, ctx.team.id, workItemType);
-                requests.push(request);
-            }, this);
-
-            return Q.all(requests)
-                .then(function (templateTypes) {
-
-                    var templates = [];
-                    templateTypes.forEach(function (templateType) {
-                        if (templateType.length > 0) {
-
-                            templateType.forEach(function (element) {
-                                templates.push(element)
-                            }, this);
-                        }
-                    }, this);
-                    return templates;
-                });
+            return Rest.getTemplatesForTypes(workItemTypes);
         }
 
         /**
@@ -310,8 +310,7 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
          * @returns Promise resolving to the detailed template object.
          */
         function getTemplate(id) {
-            var witClient = _WorkItemRestClient.getClient();
-            return witClient.getTemplate(ctx.project.id, ctx.team.id, id);
+            return Rest.getTemplateDetail(id);
         }
 
         // ===== Matching & Filtering =====

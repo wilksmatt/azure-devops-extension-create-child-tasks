@@ -122,19 +122,22 @@ npm run serve
 To balance performance and reliability (especially on Chromium), the extension uses both Azure DevOps SDK clients and direct REST calls.
 
 #### SDK (Azure DevOps clients)
-- Templates (list + details): `WorkItemTrackingRestClient.getTemplates(...)`, `getTemplate(...)`
-- Team settings (bug behavior, iterations): `Rest.getTeamSettings()`
-- Form context detection: `WorkItemFormService` (creation/linking still done via REST)
-- UI services (dialogs, navigation): `VSS.getService(...)` (`Dialog`, `Navigation`)
+
+- Work item form: `WorkItemFormService.getService()`, `service.getId()`, `service.hasActiveWorkItem()`
+- UI services: `VSS.getService(VSS.ServiceIds.Dialog)` (message dialogs)
+- UI controls: `VSS/Controls` and `VSS/Controls/StatusIndicator` (progress/spinner)
 
 #### REST (direct HTTP)
-- Work item fetch: `Rest.getWorkItem(id, fields)`
-- Child work item creation: `Rest.createChildWorkItem(parentWorkItem, template, patchOps)`
-- Relation update (link to parent): part of `Rest.createChildWorkItem` via JSON Patch
+
 - HTTP helpers: `Rest.getJson(url, token)`, `Rest.patchJson(url, token, ops)`
-
-This split avoids slower iframe messaging for creation while keeping higher-level SDK helpers where they’re stable and convenient.
-
+- Context helpers: `Rest.getContextInfo()`, `Rest.getAccessTokenString()`
+- Work item fetch: `Rest.getWorkItem(id, fields)`
+- Child creation: `Rest.createChildWorkItem(currentWorkItem, taskTemplate, newWorkItem)`
+- Team settings: `Rest.getTeamSettings()` (derives `defaultIteration.path`)
+- Work item type categories: `Rest.getWorkItemTypeCategories()`, `Rest.getWorkItemTypeCategory(referenceName)`
+- Template list: `Rest.getTemplatesForTypes(workItemTypes)`
+- Template detail: `Rest.getTemplateDetail(id)`
+ 
 ## Credits ##
 
 Cloned from https://github.com/figueiredorui/1-click-child-links
