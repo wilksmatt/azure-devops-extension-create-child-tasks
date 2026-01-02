@@ -16,30 +16,6 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
         }
 
         /**
-         * Checks if a template field should be applied to the child work item.
-         * Skips unsupported keys and special tokens handled elsewhere.
-         * @param {*} taskTemplate Template object with fields.
-         * @param {string} key Field name.
-         * @returns {boolean} Whether the field is valid to process.
-         */
-        function isPropertyValid(taskTemplate, key) {
-            if (taskTemplate.fields.hasOwnProperty(key) == false) {
-                return false;
-            }
-            if (key.indexOf('System.Tags') >= 0) { //not supporting tags for now
-                return false;
-            }
-            if (taskTemplate.fields[key].toLowerCase() == '@me') { //current identity is handled later
-                return false;
-            }
-            if (taskTemplate.fields[key].toLowerCase() == '@currentiteration') { //current iteration is handled later
-                return false;
-            }
-
-            return true;
-        }
-
-        /**
          * Replaces `{ParentField}` tokens in a template field value using the parent work item.
          * @param {string} fieldValue Template field value (may contain tokens).
          * @param {*} currentWorkItem Parent work item fields map.
@@ -59,6 +35,28 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
         }
 
         /**
+         * Checks if a template field should be applied to the child work item.
+         * Skips unsupported keys and special tokens handled elsewhere.
+         * @param {*} taskTemplate Template object with fields.
+         * @param {string} key Field name.
+         * @returns {boolean} Whether the field is valid to process.
+         */
+        function isPropertyValid(taskTemplate, key) {
+            // Own-property check handled in the loop for clarity and minor perf gain
+            if (key.indexOf('System.Tags') >= 0) { //not supporting tags for now
+                return false;
+            }
+            if (taskTemplate.fields[key].toLowerCase() == '@me') { //current identity is handled later
+                return false;
+            }
+            if (taskTemplate.fields[key].toLowerCase() == '@currentiteration') { //current iteration is handled later
+                return false;
+            }
+
+            return true;
+        }
+
+        /**
          * Builds the JSON patch document for a new child work item using a template.
          * Copies/sets fields from the parent and template, honoring special tokens.
          * @param {*} currentWorkItem Parent work item fields map.
@@ -73,6 +71,11 @@ define(["TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient", "TFS
 
             // Iteration through every field in the task template
             for (var key in taskTemplate.fields) {
+                
+                // Skip inherited properties early
+                if (!Object.prototype.hasOwnProperty.call(taskTemplate.fields, key)) {
+                    continue;
+                }
 
                 // Check whether we are supporting the specific field / property in the task template
                 if (isPropertyValid(taskTemplate, key)) {
