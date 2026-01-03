@@ -215,7 +215,7 @@ define(["TFS/WorkItemTracking/Services", "q", "./logger", "./config", "./rest"],
                                     var tmplFetchStart = Date.now();
                                     getTemplates(childTypes)
                                         .then(function (response) {
-                                            Logger.timestamp('Templates fetched', tmplFetchStart);
+                                            Logger.timestamp('Templates fetched (' + response.length + ')', tmplFetchStart);
 
                                             // Check for no templates
                                             if (response.length == 0) {
@@ -240,7 +240,7 @@ define(["TFS/WorkItemTracking/Services", "q", "./logger", "./config", "./rest"],
                                                     // skip malformed templates
                                                 }
                                             }
-                                            Logger.timestamp('Templates prefiltered (' + candidates.length + ')', prefilterStart);
+                                            Logger.timestamp('Templates matched (' + candidates.length + ')', prefilterStart);
 
                                             // Check whether any candidates remain; if none, log and exit
                                             if (candidates.length === 0) {
@@ -251,7 +251,7 @@ define(["TFS/WorkItemTracking/Services", "q", "./logger", "./config", "./rest"],
                                             // Sort only the candidates to reduce work
                                             var sortCandidatesStart = Date.now();
                                             candidates = candidates.sort(sortTemplates);
-                                            Logger.timestamp('Candidates sorted (' + candidates.length + ')', sortCandidatesStart);
+                                            Logger.timestamp('Templates sorted (' + candidates.length + ')', sortCandidatesStart);
                                             
                                             // Prefetch only candidate details in parallel, then create sequentially
                                             var detailFetchStart = Date.now();
