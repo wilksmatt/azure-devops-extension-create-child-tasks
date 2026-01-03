@@ -608,7 +608,8 @@ define(["TFS/WorkItemTracking/Services", "q", "./logger", "./config", "./rest"],
             str = str || '';
             var attempts = 0;
             var lastError = null;
-            var MAX_ATTEMPTS = 100; // safety cap to avoid pathological cases
+            var MAX_ATTEMPTS = 32; // safety cap to avoid pathological cases
+            var hitCap = false; // track whether we hit the cap so we can log once at the end
 
             // Fast-path: try whole trimmed string if it looks like a JSON object
             var trimmed = str.trim();
@@ -651,7 +652,7 @@ define(["TFS/WorkItemTracking/Services", "q", "./logger", "./config", "./rest"],
             }
 
             // Try pairs: for each open from left, try closes from right
-            for (var oi = 0; oi < opens.length; oi++) {
+            outer: for (var oi = 0; oi < opens.length; oi++) {
                 var start = opens[oi];
                 for (var ci = closes.length - 1; ci >= 0; ci--) {
                     var end = closes[ci];
@@ -665,15 +666,16 @@ define(["TFS/WorkItemTracking/Services", "q", "./logger", "./config", "./rest"],
                         attempts++;
                         lastError = (e && e.message) ? e.message : e;
                         if (attempts >= MAX_ATTEMPTS) {
-                            Logger.warn('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts (cap). Last error: ' + lastError);
-                            return null;
+                            hitCap = true;
+                            break outer; // stop trying more candidates; log once at the end
                         }
                     }
                 }
             }
 
             if (attempts > 0) {
-                Logger.warn('Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts. Last error: ' + lastError);
+                var msg = 'Failed to parse JSON for template "' + contextLabel + '" after ' + attempts + ' attempts' + (hitCap ? ' (hit cap)' : '') + '.';
+                Logger.warn(msg);
             }
             return null;
         }
