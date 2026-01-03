@@ -205,6 +205,10 @@ define(["TFS/WorkItemTracking/Services", "q", "./logger", "./config", "./rest"],
                             getChildTypes(workItemType, teamSettings)
                                 .then(function (childTypes) {
                                     Logger.timestamp('Resolved valid child types', childTypesStart);
+                                    try {
+                                        Logger.debug('Bug behavior: ' + ((teamSettings && teamSettings.bugsBehavior) || 'Off'));
+                                        Logger.debug('Child types: ' + JSON.stringify(childTypes));
+                                    } catch (e) { /* ignore logging errors */ }
                                     if (childTypes == null)
                                         return;
                                     // get Templates
@@ -372,7 +376,7 @@ define(["TFS/WorkItemTracking/Services", "q", "./logger", "./config", "./rest"],
             else {
 
                 // Parse the criteria in the square brackets
-                var filters = taskTemplate.description.match(/[^[\]]+(?=])/g);
+                var filters = taskTemplate.description && taskTemplate.description.match(/[^[\]]+(?=])/g);
 
                 // Find whether the current work item matches
                 if (filters) {
@@ -534,26 +538,26 @@ define(["TFS/WorkItemTracking/Services", "q", "./logger", "./config", "./rest"],
 
                     if (category != null) {
                         var requests = [];
-                        var bugsBehavior = (teamSettings && teamSettings.bugsBehavior) || 'Off'; // Off, AsTasks, AsRequirements
+                        // Normalize to lowercase to avoid case-sensitive mismatches (e.g., 'asRequirements')
+                        var bugsBehavior = ((teamSettings && teamSettings.bugsBehavior) || 'off').toLowerCase(); // off, astasks, asrequirements
 
                         if (category.referenceName === 'Microsoft.EpicCategory') {
                             return Rest.getWorkItemTypeCategory('Microsoft.FeatureCategory')
                                 .then(function (response) {
                                     var category = response;
-
                                     return category.workItemTypes.map(function (item) { return item.name; });
                                 });
                         } else if (category.referenceName === 'Microsoft.FeatureCategory') {
                             requests.push(Rest.getWorkItemTypeCategory('Microsoft.RequirementCategory'));
-                            if (bugsBehavior === 'AsRequirements') { requests.push(Rest.getWorkItemTypeCategory('Microsoft.BugCategory')); }
+                            if (bugsBehavior === 'asrequirements') { requests.push(Rest.getWorkItemTypeCategory('Microsoft.BugCategory')); }
                         } else if (category.referenceName === 'Microsoft.RequirementCategory') {
                             requests.push(Rest.getWorkItemTypeCategory('Microsoft.TaskCategory'));
-                            if (bugsBehavior === 'AsTasks') { requests.push(Rest.getWorkItemTypeCategory('Microsoft.BugCategory')); }
-                        } else if (category.referenceName === 'Microsoft.BugCategory' && bugsBehavior === 'AsRequirements') {
+                            if (bugsBehavior === 'astasks') { requests.push(Rest.getWorkItemTypeCategory('Microsoft.BugCategory')); }
+                        } else if (category.referenceName === 'Microsoft.BugCategory') {
+                            // Always allow Task children under Bugs
                             requests.push(Rest.getWorkItemTypeCategory('Microsoft.TaskCategory'));
                         } else if (category.referenceName === 'Microsoft.TaskCategory') {
-                            requests.push(Rest.getWorkItemTypeCategory('Microsoft.TaskCategory'));
-                        } else if (category.referenceName == 'Microsoft.BugCategory') {
+                            // Always allow Task children under Tasks
                             requests.push(Rest.getWorkItemTypeCategory('Microsoft.TaskCategory'));
                         }
 
