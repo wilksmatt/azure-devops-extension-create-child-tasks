@@ -137,6 +137,12 @@ To balance performance and reliability (especially on Chromium), the extension u
 - Work item type categories: `Rest.getWorkItemTypeCategories()`, `Rest.getWorkItemTypeCategory(referenceName)`
 - Template list: `Rest.getTemplatesForTypes(workItemTypes)`
 - Template detail: `Rest.getTemplateDetail(id)`
+
+#### REST API Version and Compatibility
+
+- API version: Uses Azure DevOps REST API `6.0` for WIT and Work endpoints (e.g., `?api-version=6.0`).
+- Platforms: Compatible with Azure DevOps Services (cloud) and Azure DevOps Server (on‑prem) 2020 and above.
+- Docs: [Azure DevOps API & TFS Version Mapping](https://learn.microsoft.com/en-ca/rest/api/azure/devops/?view=azure-devops-rest-7.2&viewFallbackFrom=azure-devops-rest-6.0#api-and-tfs-version-mapping)
  
 ## Credits ##
 
