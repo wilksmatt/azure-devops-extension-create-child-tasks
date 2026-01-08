@@ -14,6 +14,8 @@ Create Child Tasks adds a toolbar action to Azure DevOps work items that instant
 
 > **Note:** This extension builds on and enhances the original [1‑Click Child‑Links extension](https://marketplace.visualstudio.com/items?itemName=ruifig.vsts-work-item-one-click-child-links). The original has great core functionality but has not been updated since 2020 and has some known issues. This extension provides fixes, improved filtering, better error handling, expanded documentation, and active support.
 
+**Compatibility:** Create Child Tasks works with both Azure DevOps Services (cloud) and Azure DevOps Server (on‑premises). It has been tested on both platforms, including Azure DevOps Server 2022.
+
 **Key Features:**
 
 - One-click creation of multiple child work items from a parent.
