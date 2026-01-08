@@ -2,7 +2,7 @@
 
 **Quick links:**
 
-[Overview](#overview) • [Quick Start](#quick-start) • [How-To](#how-to-guide) • [Examples](#examples) • [Troubleshooting](#troubleshooting) • [FAQ](#faq) • [Changelog](#changelog) • [Credits](#credits)
+[Overview](#overview) • [What's New?](#whats-new) • [Quick Start](#quick-start) • [How-To](#how-to-guide) • [Examples](#examples) • [Troubleshooting](#troubleshooting) • [FAQ](#faq) • [Changelog](#changelog) • [Credits](#credits)
 
 ## Overview
 
@@ -28,6 +28,12 @@ Create Child Tasks adds a toolbar action to Azure DevOps work items that instant
 - Works with any child work item type (Tasks, Bugs, Features, custom types).
 - Child items are created in alphabetical order by template name (can be controlled with prefixes).
 - Well supported with comprehensive documentation and practical examples.
+
+## What's New?
+
+Version 1.1.0 brings a big speed boost when creating child work items that is now much faster, especially in Chrome and Edge browsers.
+
+See the full details in the [Changelog](#changelog).
 
 ## Quick Start
 
@@ -267,11 +273,18 @@ Multiple rules (AND across rules, OR within rules):
 
 All notable changes to Create Child Tasks. Dates in YYYY-MM-DD.
 
+### 1.1.0 — 2026-01
+
+- Fixed: Big speed boost in Chrome and Edge browsers
+- Changed: Improved overall performance of child work item generation
+- Changed: Logging glow-up that brings clearer formatting and coverage when you need details
+- Changed: General tune-ups and polish across the extension
+
 ### 1.0.0 — 2025-12
 
 - Fixed: Broken Tag filtering
 - Fixed: Resolved "Error saving [object Object]" error message when creating child work items
-- Fixed: Invalid/malformed template JSON failing remaining template matching (possibly causing not all matching child work items to be created).
+- Fixed: Invalid/malformed template JSON failing remaining template matching (possibly causing not all matching child work items to be created)
 - Fixed: Graceful handling use of @currentiteration when no default iterations are setup for respective Project Team
 - Added: IterationPath filtering
 - Added: Release Notes / Changelog
@@ -282,7 +295,7 @@ All notable changes to Create Child Tasks. Dates in YYYY-MM-DD.
 ### 0.3.x — 2020
 
 - Added: Wildcard filtering on Title
-- Changed: Removed "Create Child Tasks" button from backlog and board menu views to prevent child work items not being created reliably.
+- Changed: Removed "Create Child Tasks" button from backlog and board menu views to prevent child work items not being created reliably
 
 
 ### 0.1.x — 2019

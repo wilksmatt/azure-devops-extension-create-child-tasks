@@ -1,6 +1,6 @@
 {
     "id": "create-child-tasks-test",
-    "version": "1.0.21",
+    "version": "1.0.22",
     "name": "Create Child Tasks (Test)",
     "public": false,
     "baseUri": "https://localhost:3000"
