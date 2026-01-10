@@ -1,8 +1,8 @@
 # Create Child Tasks
 
-**Quick links:**
+**Quick Links**
 
-[Overview](#overview) • [What's New?](#whats-new) • [Quick Start](#quick-start) • [How-To](#how-to-guide) • [Examples](#examples) • [Troubleshooting](#troubleshooting) • [FAQ](#faq) • [Changelog](#changelog) • [Credits](#credits)
+[Overview](#overview) • [What's New?](#whats-new) • [How-To](#how-to-guide) • [Examples](#examples) • [Troubleshooting](#troubleshooting) • [FAQ](#faq) • [Changelog](#changelog) • [Credits](#credits)
 
 ## Overview
 
@@ -12,11 +12,7 @@ Create Child Tasks adds a toolbar action to Azure DevOps work items that instant
 
 ![Create Child Work Items](img/create-child-tasks-screenshot-work-item-menu-item.png)
 
-> **Note:** This extension builds on and enhances the original [1‑Click Child‑Links extension](https://marketplace.visualstudio.com/items?itemName=ruifig.vsts-work-item-one-click-child-links). The original has great core functionality but has not been updated since 2020 and has some known issues. This extension provides fixes, improved filtering, better error handling, expanded documentation, and active support.
-
-**Compatibility:** Create Child Tasks works with both Azure DevOps Services (cloud) and Azure DevOps Server (on‑premises). It has been tested on both platforms, including Azure DevOps Server 2022.
-
-**Key Features:**
+### Key Features
 
 - One-click creation of multiple child work items from a parent.
 - Uses team-defined Templates for flexible, reusable child definitions.
@@ -29,19 +25,25 @@ Create Child Tasks adds a toolbar action to Azure DevOps work items that instant
 - Child items are created in alphabetical order by template name (can be controlled with prefixes).
 - Well supported with comprehensive documentation and practical examples.
 
+### Compatibility
+
+ - **1‑Click Child‑Links extension:** This extension builds on and enhances the original [1‑Click Child‑Links extension](https://marketplace.visualstudio.com/items?itemName=ruifig.vsts-work-item-one-click-child-links). The original has good core functionality but has not been updated since 2020 and has known issues. This extension provides fixes, enhanced features, better performance, expanded documentation, and active support.
+
+ - **Azure DevOps:** Create Child Tasks works with both Azure DevOps Services (cloud) and Azure DevOps Server (on‑premises). It has been tested on both platforms, including Azure DevOps Server 2022.
+
 ## What's New?
 
 Version 1.1.0 brings a big speed boost when creating child work items that is now much faster, especially in Chrome and Edge browsers.
 
 See the full details in the [Changelog](#changelog).
 
-## Quick Start
-
-1. Install the extension at your Azure DevOps organization (org-level install; once installed it is available to all projects in that organization / collection).
-2. [Define one or more Templates](#defining-task-templates) for your team (Project Settings → Boards → Team Configuration → Templates).
-3. Open a parent work item (User Story / PBI / Bug) and [choose "Create Child Tasks" from the toolbar](#applying-child-work-items) — child work items will be created from matching templates.
-
 ## How-To Guide
+
+### Quick Start
+
+1. **Install:** Install the extension at your Azure DevOps organization (org-level install; once installed it is available to all projects in that organization / collection).
+2. **Define Templates:** [Define one or more Templates](#defining-task-templates) for your team (Project Settings → Boards → Team Configuration → Templates).
+3. **Create Child Work Items:** Open a parent work item (User Story / PBI / Bug) and [choose "Create Child Tasks" from the toolbar](#applying-child-work-items) — child work items will be created from matching templates.
 
 ### Defining Work Item Templates
 
